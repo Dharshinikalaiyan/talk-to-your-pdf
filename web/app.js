@@ -292,6 +292,11 @@ function renderLibrary() {
   }
 }
 
+// was the last interaction a key press? (then show focus, otherwise keep it quiet)
+let lastInputWasKeyboard = false;
+addEventListener("keydown", () => (lastInputWasKeyboard = true), true);
+addEventListener("pointerdown", () => (lastInputWasKeyboard = false), true);
+
 // "My PDFs" pops out of its button like the settings bubble.
 function openLibrary() {
   closeHistory();
@@ -305,7 +310,10 @@ function openLibrary() {
   lib.classList.add("open", "popping");
   btn.setAttribute("aria-expanded", "true");
   ambient?.bubble();
-  ($("library-search-wrap").hidden ? $("library-list").querySelector("button") : $("library-search"))?.focus();
+  closeSettings();   // one header pop-up at a time
+  // keyboard users land on the search box or first PDF; mouse users get no focus ring
+  const target = $("library-search-wrap").hidden ? $("library-list").querySelector("button") : $("library-search");
+  if (lastInputWasKeyboard) target?.focus(); else lib.focus({ preventScroll: true });
 }
 
 function closeLibrary() {
@@ -1227,6 +1235,7 @@ document.querySelector(".top-nav").addEventListener("click", (e) => {
 function openSettings() {
   const b = $("settings-bubble");
   if (!b.hidden && !b.classList.contains("closing")) return;
+  closeLibrary();   // one header pop-up at a time
   b.hidden = false;
   b.classList.remove("closing");
   b.classList.add("popping");
@@ -1260,7 +1269,12 @@ function applyMotion(on) {
   const wrap = $("settings");
   let hoverTimer;
   // Opens on hover (like the reference) and on click/tap; closes when you move away or press Esc.
-  wrap.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") { clearTimeout(hoverTimer); openSettings(); } });
+  // hover opens it too, but not while another pop-up (My PDFs, Chats) is open
+  wrap.addEventListener("pointerenter", (e) => {
+    if (e.pointerType !== "mouse" || !$("library").hidden || !$("history").hidden) return;
+    clearTimeout(hoverTimer);
+    openSettings();
+  });
   wrap.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") hoverTimer = setTimeout(closeSettings, 350); });
   $("settings-btn").addEventListener("click", () => ($("settings-bubble").hidden ? openSettings() : closeSettings()));
   document.addEventListener("click", (e) => { if (!wrap.contains(e.target)) closeSettings(); });

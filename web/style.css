@@ -525,3 +525,7 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
   filter: drop-shadow(0 2px 8px rgb(150 60 230 / .55)); transition: transform .5s var(--ease); }
 #home-link:hover .mark { transform: rotate(-8deg) scale(1.06); }
 .entry .wordmark .mark { display: none; }
+
+/* focus rings inside the pop-ups: drawn inside the row so they aren't clipped */
+.library:focus { outline: none; }
+.library .library-open:focus-visible, .library .library-delete:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
