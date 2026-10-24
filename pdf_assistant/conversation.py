@@ -68,7 +68,7 @@ TOPICS = [
 ]
 
 TOPIC_HELP = {
-    "upload": "To add PDFs, drop them anywhere on the upload button or tap Upload at the top. You can add many at once (up to 25 MB each).",
+    "upload": "To add PDFs, drop them anywhere on the upload button or tap Upload at the top. You can add many at once (up to 100 pages and 25 MB each).",
     "switch": "To switch PDFs, tap “My PDFs” at the top and pick one, use the chips under the chat, or just tell me, like “open the warranty policy”.",
     "voice": "To ask out loud, tap the mic, speak your question, then tap it again. I'll work out the words and answer.",
     "listen": "To hear answers, turn on the speaker button next to the ask bar (or Settings, “Read answers aloud”). Every answer also has a Listen button.",

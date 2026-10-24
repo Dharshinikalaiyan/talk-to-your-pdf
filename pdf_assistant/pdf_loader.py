@@ -20,7 +20,7 @@ from .models import Chunk
 
 CHUNK_CHARS = 700
 OVERLAP_CHARS = 150
-MAX_PAGES = 300
+MAX_PAGES = 100
 
 
 class PDFError(ValueError):

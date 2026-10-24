@@ -35,7 +35,7 @@ def build() -> Path:
     (OUT / "local").mkdir(parents=True)
     for name in ["style.css", "app.js", "pond.js", "scene3d.js", "ripples.js", "sound.js"]:
         shutil.copy(WEB / name, OUT / name)
-    for name in ["engine.js", "backend.js"]:
+    for name in ["engine.js", "backend.js", "models-worker.js"]:
         shutil.copy(WEB / "local" / name, OUT / "local" / name)
     if (WEB / "logo.png").exists():
         shutil.copy(WEB / "logo.png", OUT / "logo.png")
@@ -57,7 +57,11 @@ def build() -> Path:
     # the file's contents makes every update load as one consistent set.
     engine = OUT / "local" / "engine.js"
     backend = OUT / "local" / "backend.js"
-    backend.write_text(backend.read_text().replace('from "./engine.js"', f'from "./engine.js?v={_hash(engine)}"'))
+    worker = OUT / "local" / "models-worker.js"
+    worker.write_text(worker.read_text().replace('from "./engine.js"', f'from "./engine.js?v={_hash(engine)}"'))
+    backend.write_text(backend.read_text()
+                       .replace('from "./engine.js"', f'from "./engine.js?v={_hash(engine)}"')
+                       .replace('"./models-worker.js"', f'"./models-worker.js?v={_hash(worker)}"'))
     for name in ["style.css", "app.js", "pond.js", "scene3d.js", "ripples.js", "sound.js", "local/backend.js"]:
         html = html.replace(f'"{name}"', f'"{name}?v={_hash(OUT / name)}"')
     (OUT / "index.html").write_text(html)

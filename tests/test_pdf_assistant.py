@@ -543,3 +543,15 @@ def test_question_naming_the_pdf_gets_the_right_answer(sample_pdf, tmp_path, mon
     ans = client.post("/api/chat", json={"message": "How long is the warranty in the helios manual?"}).json()
     assert ans["highlight"] == "10-year" and ans["citations"][0]["page"] == 5
     assert ans["question"] == "How long is the warranty in the helios manual?"   # shown as asked
+
+
+def test_pdfs_over_100_pages_are_refused():
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    for n in range(101):
+        pdf.add_page()
+        pdf.set_font("Helvetica", size=12)
+        pdf.cell(0, 10, f"Page {n + 1}")
+    with pytest.raises(PDFError, match="101 pages. The limit is 100"):
+        chunk_pdf("x", bytes(pdf.output()))

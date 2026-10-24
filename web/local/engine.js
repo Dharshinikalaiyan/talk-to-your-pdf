@@ -14,7 +14,7 @@
 
 export const CHUNK_CHARS = 700;
 export const OVERLAP_CHARS = 150;
-export const MAX_PAGES = 300;
+export const MAX_PAGES = 100;
 export const CANDIDATES = 8;
 export const MIN_SCORE = 0.3;
 export const RERANK_MIN = -9;
@@ -31,7 +31,7 @@ export class PDFError extends Error {}
 
 // ---------------------------------------------------------------- PDF -> pages -> chunks
 
-export async function extractPages(pdfjs, data) {
+export async function extractPages(pdfjs, data, onPage = () => {}) {
   const head = new TextDecoder().decode(data.slice(0, 5));
   if (!head.startsWith("%PDF")) throw new PDFError("That file isn't a PDF. Choose a file that ends in .pdf.");
   let pdf;
@@ -48,6 +48,7 @@ export async function extractPages(pdfjs, data) {
     let text = "";
     for (const item of content.items) text += (item.str ?? "") + (item.hasEOL ? "\n" : "");
     pages.push(clean(text));
+    onPage(n, pdf.numPages);
   }
   await pdf.destroy();
   if (!pages.some(Boolean)) throw new PDFError("No selectable text found. This looks like a scanned PDF, which needs OCR (not supported yet).");
@@ -233,7 +234,7 @@ const TOPICS = [
   ["sound", /\b(music|sound|sounds|audio)\b/],
 ];
 const TOPIC_HELP = {
-  upload: "To add PDFs, drop them anywhere on the page or tap Upload at the top. You can add many at once (up to 25 MB each). They stay on this device.",
+  upload: "To add PDFs, drop them anywhere on the page or tap Upload at the top. You can add many at once (up to 100 pages and 25 MB each). They stay on this device.",
   switch: "To switch PDFs, tap “My PDFs” at the top and pick one, use the buttons under the chat, or just tell me, like “open the warranty policy”.",
   voice: "To ask out loud, tap the mic and speak. When you stop talking, I'll answer. Voice works in Chrome, Edge and Safari.",
   listen: "To hear answers, turn on the speaker button next to the ask bar (or Settings, “Read answers aloud”). Every answer also has a Listen button.",

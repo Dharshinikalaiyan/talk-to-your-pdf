@@ -6,7 +6,7 @@
 // visitor's library is private by construction.
 
 import * as T from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
-import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError } from "./engine.js?v=6f916401d4";
+import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError } from "./engine.js?v=568fa2bb31";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_DOCS = 100;
@@ -29,7 +29,30 @@ function onProgress(p) {
   const busy = [...progress.values()].some(([l, t]) => l < t);
   dispatchEvent(new CustomEvent("model-progress", { detail: busy ? { loaded, total } : null }));
 }
-const models = createModels(T, { onProgress });
+// The models run in a background worker so indexing a big PDF never freezes the page.
+// If this browser can't run module workers, they run here instead (slower, but it works).
+function workerModels() {
+  const worker = new Worker(new URL("./models-worker.js?v=1399f1a92f", import.meta.url), { type: "module" });
+  const pending = new Map();
+  let next = 0;
+  worker.onmessage = ({ data }) => {
+    if (data.type === "progress") return onProgress(data.p);
+    const p = pending.get(data.id);
+    pending.delete(data.id);
+    data.error ? p?.reject(new Error(data.error)) : p?.resolve(data.result);
+  };
+  const call = (fn) => (...args) => new Promise((resolve, reject) => {
+    const id = next++;
+    pending.set(id, { resolve, reject });
+    worker.postMessage({ id, fn, args });
+  });
+  return { embed: call("embed"), rerank: call("rerank"), extract: call("extract") };
+}
+let models;
+try { models = workerModels(); } catch { models = createModels(T, { onProgress }); }
+
+// Indexing progress for the page ("Reading page 12 of 300…").
+const indexProgress = (text) => dispatchEvent(new CustomEvent("index-progress", { detail: text }));
 
 // ---------------------------------------------------------------- IndexedDB
 
@@ -83,12 +106,20 @@ async function addDocument(filename, data) {
   if (docs.length >= MAX_DOCS) throw new HttpError(`You can keep up to ${MAX_DOCS} PDFs. Delete one to upload another.`);
   let pages;
   try {
-    pages = await extractPages(window.pdfjsLib, new Uint8Array(data));
+    pages = await extractPages(window.pdfjsLib, new Uint8Array(data), (n, total) => {
+      if (total > 5 && (n % 5 === 0 || n === total)) indexProgress(`Reading ${filename}: page ${n} of ${total}…`);
+    });
   } catch (e) {
     throw new HttpError(e instanceof PDFError ? e.message : "This PDF couldn't be read.");
   }
   const chunks = chunkPages(pages);
-  const vectors = await models.embed(chunks.map((c) => c.text));
+  // embed in batches, reporting progress, so a long PDF shows it's moving
+  const vectors = [];
+  for (let i = 0; i < chunks.length; i += 32) {
+    vectors.push(...(await models.embed(chunks.slice(i, i + 32).map((c) => c.text))));
+    if (chunks.length > 32) indexProgress(`Indexing ${filename}: ${Math.min(i + 32, chunks.length)} of ${chunks.length} passages…`);
+  }
+  indexProgress(null);
   const doc = { doc_id: randomId(), filename: (filename || "document.pdf").split(/[\\/]/).pop().slice(0, 120), pages: pages.length,
     chunks, vectors, sha256: hash, uploaded_at: new Date().toISOString() };
   await put("files", data, doc.doc_id);

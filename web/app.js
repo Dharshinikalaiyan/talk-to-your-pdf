@@ -1334,6 +1334,11 @@ if (LOCAL) {
   bar.setAttribute("role", "status");
   bar.hidden = true;
   document.body.append(bar);
+  // reading / indexing a big PDF
+  addEventListener("index-progress", (e) => {
+    bar.hidden = !e.detail;
+    if (e.detail) bar.replaceChildren(Object.assign(document.createElement("span"), { textContent: e.detail }));
+  });
   addEventListener("model-progress", (e) => {
     const d = e.detail;
     bar.hidden = !d;
