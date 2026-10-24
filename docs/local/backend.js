@@ -6,7 +6,7 @@
 // visitor's library is private by construction.
 
 import * as T from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
-import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError, identifiers, withoutIdentifiers, wantsSummary, summarize } from "./engine.js?v=f993fef739";
+import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError, identifiers, withoutIdentifiers, wantsSummary, summarize } from "./engine.js?v=1c755ac616";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_DOCS = 100;
@@ -32,7 +32,7 @@ function onProgress(p) {
 // The models run in a background worker so indexing a big PDF never freezes the page.
 // If this browser can't run module workers, they run here instead (slower, but it works).
 function workerModels() {
-  const worker = new Worker(new URL("./models-worker.js?v=b0209c78f5", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("./models-worker.js?v=26e084537b", import.meta.url), { type: "module" });
   const pending = new Map();
   let next = 0;
   worker.onmessage = ({ data }) => {

@@ -102,6 +102,16 @@ def table_value(question: str, passage: str) -> tuple[str, str] | None:
     return (best[1], best[2]) if best else None
 
 
+def as_question(text: str) -> str:
+    """Spoken questions arrive lowercase with no "?"; the reader model expects normal casing."""
+    text = text.strip()
+    if text.isupper():               # "HOW LONG IS IT" -> "How long is it"
+        text = text.capitalize()
+    if text and text[0].islower():
+        text = text[0].upper() + text[1:]
+    return text if text.endswith(("?", ".", "!")) else text + "?"
+
+
 def local_answer(question: str, citations: list[Citation]) -> Result:
     # 0. A matching table row ("Tax (7%) $395.15") beats the reader on flattened tables.
     for c in citations[:2]:
@@ -113,12 +123,15 @@ def local_answer(question: str, citations: list[Citation]) -> Result:
     # 1. Ask the reader for an exact answer span in the top 2 passages. Prefer the re-ranker's
     #    best passage; the second only wins if its answer is clearly more confident (reader
     #    scores of two plausible spans are often within a hair of each other).
-    spans = [(extract(question, c.snippet), c) for c in citations[:2]]
+    asked = as_question(question)   # the reader is case-sensitive: "how long is it" -> "How long is it?"
+    spans = [(extract(asked, c.snippet), c) for c in citations[:2]]
     spans = [(s, c) for s, c in spans if s]
     if spans:
         span, c = spans[0]
+        top = citations[0].score
         for other, oc in spans[1:]:
-            if other.score > span.score + SECOND_PASSAGE_MARGIN:
+            # the further the search ranked this passage below the top one, the clearer its answer must be
+            if other.score > span.score + SECOND_PASSAGE_MARGIN + 2 * max(0.0, top - oc.score):
                 span, c = other, oc
         return Result(text=f"{span.sentence} [p. {c.page}]", engine="local", highlight=span.text)
 

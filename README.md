@@ -18,7 +18,7 @@ Upload a PDF and ask questions about it by typing or speaking. Answers come only
 ```bash
 cd project2-pdf-assistant   # this folder
 ../.venv/bin/uvicorn api:app --port 8766   # then open http://127.0.0.1:8766
-../.venv/bin/pytest -q                     # 81 tests
+../.venv/bin/pytest -q                     # 84 tests
 ../.venv/bin/python make_sample_pdf.py     # rebuild the sample manual
 ```
 

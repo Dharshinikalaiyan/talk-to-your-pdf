@@ -645,3 +645,12 @@ def test_summary_through_the_chat(sample_pdf, tmp_path, monkeypatch):
     ans = client.post("/api/chat", json={"message": "Summarise this document"}).json()
     assert ans["kind"] == "summary" and ans["answer"].count("•") >= 3 and "[p. 5]" in ans["answer"]
     assert "[p." not in ans["spoken"]
+
+
+@pytest.mark.parametrize("question", ["How long is the warranty?", "how long is the warranty", "HOW LONG IS THE WARRANTY"])
+def test_spoken_style_questions_get_the_same_answer(doc, question):
+    """Speech recognition gives lowercase text with no '?': it must still find '10-year' on page 5."""
+    from pdf_assistant.answering import local_answer
+
+    result = local_answer(question, doc.search(question))
+    assert result.highlight == "10-year" and result.text.endswith("[p. 5]")

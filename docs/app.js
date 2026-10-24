@@ -677,7 +677,9 @@ function answerNodes(text, docId) {
 function addBotMessage(ans, { restoring = false, spoken = false } = {}) {
   const li = document.createElement("li");
   li.className = `msg bot ${ans.kind === "chat" ? "talk" : ""}`;
-  const top = ans.citations[0];
+  // the page chip shows the page the answer actually came from (its trailing [p. N])
+  const cited = Number((ans.answer || "").match(/\[p\.\s*(\d+)\]\s*$/)?.[1]);
+  const top = ans.citations.length ? { ...ans.citations[0], page: cited || ans.citations[0].page } : undefined;
   if (ans.kind === "doc" && !top) li.classList.add("not-found");
   if (ans.kind === "summary") li.classList.add("summary");
 

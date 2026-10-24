@@ -274,15 +274,21 @@ export async function answer(models, question, citations) {
     const row = tableValue(question, c.snippet);
     if (row) return { text: `${row.label}: ${row.value} [p. ${c.page}]`, highlight: row.value };
   }
+  // the reader is case-sensitive: spoken "how long is it" -> "How long is it?"
+  let asked = question.trim();
+  if (asked === asked.toUpperCase() && /[A-Z]/.test(asked)) asked = asked[0] + asked.slice(1).toLowerCase();   // ALL CAPS
+  if (/^[a-z]/.test(asked)) asked = asked[0].toUpperCase() + asked.slice(1);
+  if (!/[?.!]$/.test(asked)) asked += "?";
   const spans = [];
   for (const c of citations.slice(0, 2)) {
-    const s = await models.extract(question, c.snippet);
+    const s = await models.extract(asked, c.snippet);
     if (s) spans.push([s, c]);
   }
   if (spans.length) {
-    // prefer the re-ranker's best passage; another wins only if its answer is clearly more confident
+    // prefer the re-ranker's best passage; the further another was ranked below it, the clearer its answer must be
     let [s, c] = spans[0];
-    for (const [o, oc] of spans.slice(1)) if (o.score > s.score + SECOND_PASSAGE_MARGIN) [s, c] = [o, oc];
+    const top = citations[0].score;
+    for (const [o, oc] of spans.slice(1)) if (o.score > s.score + SECOND_PASSAGE_MARGIN + 2 * Math.max(0, top - oc.score)) [s, c] = [o, oc];
     return { text: `${s.sentence} [p. ${c.page}]`, highlight: s.text };
   }
   const best = citations[0];
