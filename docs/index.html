@@ -40,16 +40,24 @@
 
 
   <!-- The dream scene: CSS sky, horizon and lake, with the WebGL particle document on top -->
+  <!-- water: a gentle ripple for the pond's reflection, and a wave that follows the cursor -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="water" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.004 0.09" numOctaves="1" seed="2">
+        <animate attributeName="baseFrequency" dur="14s" values="0.004 0.09;0.005 0.11;0.004 0.09" repeatCount="indefinite"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="wavy" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence id="wavy-noise" type="fractalNoise" baseFrequency="0.008 0.025" numOctaves="2" seed="3"/>
+      <feDisplacementMap id="wavy-map" in="SourceGraphic" scale="0" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </svg>
+
   <div class="sky" aria-hidden="true">
     <span class="cloud c1"></span><span class="cloud c2"></span><span class="cloud c3"></span>
-    <svg class="ridge" viewBox="0 0 1440 120" preserveAspectRatio="none">
-      <path d="M0 120V78l40-14 26 10 34-30 30 18 22-26 40 22 28-8 30 20 46-34 32 16 24-10 40 26 30-18 36 14 26-20 44 18 30-6 28 16 40-28 26 12 34-6 30 20 38-30 34 22 22-12 44 16 28-20 36 24 30-10 26 14 42-24 30 18 26-6 40 22 34-26 30 16 22-8 40 20 30-14 36 18 26-10 34 16V120Z"/>
-      <path class="facet" d="M266 44l30 18-18 22zM706 46l38-30 34 22-30 6zM1062 30l42-24 30 18-28 10zM472 40l26-20 44 18-36 10z"/>
-    </svg>
-    <span class="lake"></span>
-    <svg class="ridge reflect" viewBox="0 0 1440 120" preserveAspectRatio="none">
-      <path d="M0 120V78l40-14 26 10 34-30 30 18 22-26 40 22 28-8 30 20 46-34 32 16 24-10 40 26 30-18 36 14 26-20 44 18 30-6 28 16 40-28 26 12 34-6 30 20 38-30 34 22 22-12 44 16 28-20 36 24 30-10 26 14 42-24 30 18 26-6 40 22 34-26 30 16 22-8 40 20 30-14 36 18 26-10 34 16V120Z"/>
-    </svg>
+    <!-- stones, their reflection and the grass are drawn by pond.js -->
+    <div class="lake"></div>
   </div>
   <canvas id="scene" aria-hidden="true"></canvas>
 
@@ -69,11 +77,16 @@
 
   <header class="top">
     <a class="wordmark" id="home-link" href="/" title="Back to the start">talk to your <em>pdf</em></a>
+    <nav class="top-nav" aria-label="Quick links">
+      <button type="button" data-ask="How does this work?">How it works</button>
+      <button type="button" data-ask="Is my data private?">Privacy</button>
+      <a href="https://github.com/Dharshinikalaiyan/talk-to-your-pdf" target="_blank" rel="noopener">Code <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </nav>
     <div class="top-right">
       <button class="pill" id="library-btn" type="button" aria-haspopup="dialog" aria-controls="library" hidden><svg aria-hidden="true"><use href="#i-library"/></svg><span class="lbl">My PDFs</span><span class="count" id="library-count"></span></button>
-      <button class="pill" id="new-chat" type="button" title="Start a new chat (this one is saved)"><svg aria-hidden="true"><use href="#i-plus"/></svg><span class="lbl">New chat</span></button>
+      <button class="icon-pill" id="new-chat" type="button" title="New chat (this one is saved under Chats)" aria-label="New chat"><svg aria-hidden="true"><use href="#i-plus"/></svg></button>
       <button class="pill" id="history-btn" type="button" aria-haspopup="dialog" aria-controls="history"><svg aria-hidden="true"><use href="#i-history"/></svg><span class="lbl">Chats</span></button>
-      <button class="pill" id="new-upload" type="button"><svg aria-hidden="true"><use href="#i-upload"/></svg><span class="lbl">Upload</span></button>
+      <button class="icon-pill" id="new-upload" type="button" title="Upload PDFs" aria-label="Upload PDFs"><svg aria-hidden="true"><use href="#i-upload"/></svg></button>
       <button class="icon-pill sound-btn" id="sound-btn" type="button" aria-pressed="false" aria-label="Turn music and sounds on"><span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></button>
       <div class="settings" id="settings">
         <button class="icon-pill" id="settings-btn" type="button" aria-expanded="false" aria-controls="settings-bubble" aria-label="Settings"><svg aria-hidden="true"><use href="#i-gear"/></svg></button>
@@ -193,6 +206,7 @@
   <script type="module" src="local/backend.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" integrity="sha512-dLxUelApnYxpLt6K2iomGngnHO83iUvZytA3YjDUCjT0HDOHKXnVYdf3hU4JjM8uEhxf9nD1/ey98U3t2vZ0qQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="pond.js"></script>
   <script src="scene3d.js"></script>
   <script src="sound.js"></script>
   <script src="app.js"></script>

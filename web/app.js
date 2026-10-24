@@ -278,7 +278,7 @@ function renderLibrary() {
 function openLibrary() {
   renderLibrary();
   $("library").hidden = false;
-  requestAnimationFrame(() => $("library").classList.add("open"));
+  slideIn($("library"));
   ($("library-search-wrap").hidden ? $("library-list").querySelector("button") : $("library-search"))?.focus();
 }
 
@@ -337,6 +337,13 @@ function closeDoc() {
   placeScene();
   setTimeout(placeScene, 950);
   $("question").focus();
+}
+
+// Show a panel, then add "open" so its CSS transition plays. Forcing a layout (instead of
+// waiting for the next animation frame) also works when the tab is in the background.
+function slideIn(el) {
+  void el.offsetWidth;
+  el.classList.add("open");
 }
 
 function escapeHtml(s) {
@@ -449,7 +456,7 @@ function showPdf(page, visible = true) {
   loadPdf(state.doc.doc_id);
   if (!visible) return closePreview();
   $("preview").hidden = false;
-  requestAnimationFrame(() => $("preview").classList.add("open"));
+  slideIn($("preview"));
   scrollPdfTo(page);
 }
 
@@ -746,8 +753,8 @@ async function send(message, via, audio, { echo = true } = {}) {
 }
 
 // ---------------------------------------------------------------- saved chats (sidebar)
-// Like ChatGPT: "+ New chat" starts fresh, and every earlier chat is saved on the server
-// (private to you) and listed in the sidebar. A reload brings back the chat you were in.
+// Like ChatGPT: "+ New chat" (or a page refresh) starts fresh, and every earlier chat is
+// saved (private to you) and listed in the sidebar, where any of them can be reopened.
 
 function setConv(id) {
   state.conv = id || null;
@@ -763,15 +770,6 @@ function showMessages(rows) {
   setFresh(!rows.length);
   renderSuggestions();
   scrollChat();
-}
-
-// After a reload: reopen the chat you were in, if it still exists.
-async function restoreChat() {
-  let last = null;
-  try { last = localStorage.getItem("pdfa-conv"); } catch {}
-  if (!last) return;
-  try { showMessages(await api(`/api/conversations/${encodeURIComponent(last)}`)); setConv(last); }
-  catch { setConv(null); }
 }
 
 // "+ New chat": the current chat is already saved; start an empty one in the centre.
@@ -829,12 +827,14 @@ async function openHistory() {
   try { state.convs = await api("/api/conversations"); } catch { state.convs = []; }
   renderHistory();
   $("history").hidden = false;
-  requestAnimationFrame(() => $("history").classList.add("open"));
+  document.body.classList.add("sidebar-open");   // the PDF steps aside while the list is open
+  slideIn($("history"));
   $("history-search").focus();
 }
 
 function closeHistory() {
   $("history").classList.remove("open");
+  document.body.classList.remove("sidebar-open");
   setTimeout(() => { if (!$("history").classList.contains("open")) $("history").hidden = true; }, reduced() ? 0 : 400);
 }
 
@@ -1088,6 +1088,10 @@ document.addEventListener("keydown", (e) => {
 });
 $("library-btn").addEventListener("click", () => { closeHistory(); openLibrary(); });
 $("history-btn").addEventListener("click", () => ($("history").hidden ? openHistory() : closeHistory()));
+// a click anywhere outside the sidebar closes it
+document.addEventListener("pointerdown", (e) => {
+  if (!$("history").hidden && !$("history").contains(e.target) && !$("history-btn").contains(e.target)) closeHistory();
+});
 $("new-chat").addEventListener("click", newChat);
 $("sidebar-new-chat").addEventListener("click", newChat);
 $("close-history").addEventListener("click", closeHistory);
@@ -1143,6 +1147,41 @@ $("question").addEventListener("input", (e) => {
   e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
 });
 $("mic").addEventListener("click", () => (state.recording ? stopRecording() : startRecording()));
+
+// ---------------------------------------------------------------- the cursor wave
+// Moving the mouse sends a ripple through the scenery and the heading, like wind over
+// water: an SVG displacement filter whose strength follows the cursor's speed, then
+// settles. The filter is switched off entirely while the mouse is still (it's costly).
+(function cursorWave() {
+  const map = $("wavy-map"), noise = $("wavy-noise");
+  const targets = [document.querySelector(".sky"), $("intro-title")];
+  let px = 0, py = 0, energy = 0, seed = 0, on = false, raf = 0;
+  const tick = () => {
+    raf = 0;
+    energy *= 0.92;
+    if (energy < 0.4) {
+      if (on) { targets.forEach((t) => (t.style.filter = "")); map.setAttribute("scale", "0"); on = false; }
+      return;
+    }
+    if (!on) { targets.forEach((t) => (t.style.filter = "url(#wavy)")); on = true; }
+    map.setAttribute("scale", Math.min(26, energy).toFixed(1));
+    noise.setAttribute("seed", String((seed = (seed + 1) % 997)));   // keep the water moving
+    raf = requestAnimationFrame(tick);
+  };
+  addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse" || reduced() || document.body.classList.contains("calm")) return;
+    const speed = Math.hypot(e.clientX - px, e.clientY - py);
+    px = e.clientX; py = e.clientY;
+    energy = Math.min(30, energy + speed * 0.25);
+    if (!raf) raf = requestAnimationFrame(tick);
+  }, { passive: true });
+})();
+
+// header links: quick questions for the assistant
+document.querySelector(".top-nav").addEventListener("click", (e) => {
+  const q = e.target.closest("[data-ask]");
+  if (q) send(q.dataset.ask, "text");
+});
 
 // ---------------------------------------------------------------- settings bubble
 
@@ -1232,7 +1271,7 @@ setupEntry();
   await refreshDocs();
   renderLibrary();
   updateIntro();
-  await restoreChat();
+  setConv(null);   // a refresh starts a fresh chat; earlier ones are under "Chats"
   renderSuggestions();
   setPlaceholder();
   placeScene();

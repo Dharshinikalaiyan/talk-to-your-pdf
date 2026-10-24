@@ -42,17 +42,32 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 
 /* ---------- the dreamscape (behind everything) ---------- */
 .sky { position: fixed; inset: 0; z-index: 0; overflow: hidden;
-  background: linear-gradient(180deg, #AE95EE 0%, #C6A2EE 30%, #E2B2E9 50%, #C79BE6 57%, #7E4CC7 60%, #5B2DA3 72%, #3B1A73 100%); }
+  background: linear-gradient(180deg, #A58BEA 0%, #BE9DEE 30%, #D9AEEC 52%, #C9A3EA 61%, #9A7BDB 62%, #7C5BC9 80%, #5B37A8 100%); }
 .cloud { position: absolute; border-radius: 50%; filter: blur(50px); opacity: .7; will-change: transform; }
 .c1 { width: 46vw; height: 18vw; left: -6vw; top: 8vh; background: #F6D5FF; animation: drift 40s ease-in-out infinite alternate; }
 .c2 { width: 38vw; height: 14vw; right: -4vw; top: 16vh; background: #FFE0F5; opacity: .55; animation: drift 52s ease-in-out infinite alternate-reverse; }
 .c3 { width: 30vw; height: 10vw; left: 34vw; top: 2vh; background: #E7D6FF; opacity: .5; animation: drift 46s ease-in-out infinite alternate; }
 @keyframes drift { to { transform: translateX(6vw); } }
-.ridge { position: absolute; left: -2%; width: 104%; height: 9vh; top: calc(58% - 9vh + 1px); fill: #6A44AE; }
-.ridge .facet { fill: #8761C4; }
-.ridge.reflect { top: 58%; transform: scaleY(-1); opacity: .35; filter: blur(1.5px); }
-.lake { position: absolute; left: 0; right: 0; top: 58%; bottom: 0;
-  background: repeating-linear-gradient(180deg, rgb(255 255 255 / .05) 0 1px, transparent 1px 9px), linear-gradient(180deg, rgb(255 255 255 / .14), transparent 40%); }
+/* ---------- the pond (pond.js draws the stones and grass) ---------- */
+:root { --shore: 61%; --stone: #5E3FA0; --stone-back: #7F63BE; --stone-face: #8D6FD0; --meadow: #4F2894; --grass: #34105F; }
+.stones, .grass { stroke-width: 0; }   /* not the outlined style used for icons */
+.stones { position: absolute; left: -4%; width: 108%; height: 15vh; top: calc(var(--shore) - 15vh + 1px); }
+.stones-front path { fill: var(--stone); }
+.stones-back path { fill: var(--stone-back); }
+.stones .face { fill: var(--stone-face); opacity: .55; }
+.stones-back .face { opacity: .35; }
+.stones .meadow-edge { fill: var(--meadow); }
+/* the water mirrors the stones, rippling gently */
+.stones.reflect { top: 0; transform: scaleY(-1); opacity: .5; filter: url(#water) blur(.6px); }
+.grass { position: absolute; left: 0; bottom: -2px; width: 100%; height: 17vh; fill: var(--grass); stroke: var(--grass); pointer-events: none; }
+.grass .reed path { stroke-width: 2.5; }
+.blades { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 5.5s ease-in-out infinite alternate; animation-delay: var(--d, 0s); }
+.blades.b1 { animation-duration: 4.2s; } .blades.b2 { animation-duration: 6.8s; } .blades.b3 { animation-duration: 5s; }
+.blades.reed { animation-duration: 7.5s; }
+@keyframes sway { from { transform: skewX(-5deg); } to { transform: skewX(6deg); } }
+.lake { position: absolute; left: 0; right: 0; top: var(--shore); bottom: 0; overflow: hidden;
+  /* still water: the sky's light mirrored, with faint horizontal glints */
+  background: repeating-linear-gradient(180deg, rgb(255 255 255 / .06) 0 1px, transparent 1px 11px), linear-gradient(180deg, rgb(255 230 250 / .22), transparent 45%); }
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .no-webgl .sky::after { content: ""; position: absolute; left: 50%; top: 40%; width: 22vmin; height: 28vmin; translate: -50% -50%; border-radius: 12px; background: repeating-linear-gradient(180deg, transparent 0 14px, rgb(255 255 255 / .55) 14px 17px) content-box, rgb(255 255 255 / .2); padding: 18% 14%; box-shadow: 0 0 60px #F3B6FF; }
 
@@ -396,10 +411,9 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .switch:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 /* ---------- night sky ---------- */
-.night .sky { background: linear-gradient(180deg, #120A33 0%, #2A1460 34%, #4B2190 52%, #5A2AA0 57%, #2B1166 60%, #1A0B44 74%, #0E0628 100%); }
+.night .sky { background: linear-gradient(180deg, #120A33 0%, #2A1460 34%, #4B2190 54%, #4A2390 61%, #2E1670 62%, #1A0B44 80%, #0E0628 100%); }
 .night .cloud { opacity: .18; }
-.night .ridge { fill: #2E1A63; }
-.night .ridge .facet { fill: #3C2580; }
+.night { --stone: #2A1760; --stone-back: #3A2580; --stone-face: #5A3FA8; --meadow: #1E0C48; --grass: #120530; }
 .night .sky::before { content: ""; position: absolute; inset: 0 0 45% 0; background-image: radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 28% 8%, #fff, transparent), radial-gradient(1.5px 1.5px at 44% 26%, #fff, transparent), radial-gradient(1px 1px at 63% 12%, #fff, transparent), radial-gradient(1.5px 1.5px at 78% 30%, #fff, transparent), radial-gradient(1px 1px at 90% 10%, #fff, transparent), radial-gradient(1px 1px at 52% 40%, #fff, transparent), radial-gradient(1.5px 1.5px at 6% 42%, #fff, transparent); opacity: .8; animation: twinkle 4s ease-in-out infinite alternate; }
 @keyframes twinkle { to { opacity: .4; } }
 
@@ -413,9 +427,8 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 @media (max-width: 560px) { .bubble { top: 116px; } }
 
 /* the horizon drifts a little when the PDF opens, like the camera moving */
-.ridge, .cloud { transition: translate 1.6s cubic-bezier(.65, 0, .25, 1); }
-.ridge { left: -8%; width: 116%; }
-.with-pdf .ridge { translate: -5vw 0; }
+.stones, .cloud { transition: translate 1.6s cubic-bezier(.65, 0, .25, 1); }
+.with-pdf .stones:not(.reflect) { translate: -3vw 0; }
 .with-pdf .cloud { translate: -8vw 0; }
 
 /* sound toggle: five little bars that dance while music plays */
@@ -447,3 +460,16 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .model-status { position: fixed; z-index: 65; left: 50%; top: 84px; transform: translateX(-50%); width: min(440px, calc(100vw - 32px)); padding: 10px 16px 12px; border-radius: 16px;
   background: rgb(255 255 255 / .92); color: var(--deep); font: 600 13px var(--sans); box-shadow: 0 16px 40px -20px rgb(40 10 100 / .6); backdrop-filter: blur(14px); }
 .model-status i { display: block; height: 4px; margin-top: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--violet) calc(var(--p) * 100%), rgb(122 60 230 / .15) 0); }
+
+/* header links in the middle */
+.top-nav { grid-column: 2; justify-self: center; display: flex; align-items: center; gap: 4px; }
+.top-nav button, .top-nav a { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 0; border-radius: 999px; background: none;
+  color: var(--white); font: 600 12.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; text-shadow: 0 1px 10px rgb(60 20 140 / .4); transition: background .2s; }
+.top-nav button:hover, .top-nav a:hover { background: rgb(255 255 255 / .16); }
+.top-nav svg { width: 14px; height: 14px; transform: rotate(-45deg); }
+.top-nav button, .top-nav a { white-space: nowrap; }
+@media (max-width: 1100px) { .top-nav { display: none; } }
+
+/* the chats sidebar takes the PDF's place while it's open, instead of piling on top */
+.sidebar-open .drawer.open { opacity: 0; transform: translateX(-40px); pointer-events: none; transition-delay: 0s; }
+.library.sidebar { z-index: 26; width: min(380px, calc(100vw - 2 * var(--gutter))); }
