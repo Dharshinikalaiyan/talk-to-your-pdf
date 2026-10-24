@@ -1,0 +1,8 @@
+data/uploads/
+data/audit.db
+data/session_secret
+__pycache__/
+.pytest_cache/
+.env
+models/
+.impeccable/hook.cache.json

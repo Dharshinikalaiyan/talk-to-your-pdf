@@ -1,0 +1,176 @@
+"""
+CONCEPT: a multi-tenant document library. Every PDF belongs to exactly one user.
+
+Isolation is enforced in layers, so one mistake doesn't leak everything:
+
+  1. OWNERSHIP CHECK   get(owner, doc_id) only returns documents that `owner` uploaded.
+                       Someone else's id and an id that doesn't exist give the SAME
+                       error, so nobody can probe which ids exist ("enumeration").
+  2. RANDOM IDS        Document ids are random, not derived from the file. If ids came
+                       from a hash of the content, two users uploading the same PDF would
+                       get the same id, revealing who has which file.
+  3. SEPARATE STORAGE  Files live in data/uploads/<owner>/, one folder per user.
+  4. SEPARATE INDEXES  Each document has its own vectors; a search never looks outside
+                       the one document the owner picked. Nothing is shared between
+                       users, not even a cache of identical files: a shared cache would
+                       let one user notice, from upload speed, that someone else already
+                       uploaded the same file (a "timing side channel").
+
+Two-stage search inside a document: embeddings pick 8 candidates, the re-ranker keeps the best 4.
+"""
+
+import hashlib
+import json
+import os
+import re
+import secrets
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+
+from .embeddings import embed
+from .models import Chunk, Citation, DocumentInfo
+from .pdf_loader import chunk_pdf
+from .reader import RERANK_MIN, rerank
+from .tenancy import USER_ID_RE
+
+# Stage 1 (embeddings) only gathers candidates, so its cutoff is loose: it just drops
+# chunks that are clearly unrelated. The re-ranker (stage 2) makes the real decision.
+CANDIDATES = 8
+MIN_SCORE = 0.3
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_DOCS_PER_USER = int(os.environ.get("MAX_DOCS_PER_USER", "100"))
+DOC_ID_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+class Document:
+    def __init__(self, info: DocumentInfo, owner: str, sha256: str, chunks: list[Chunk]):
+        self.info = info
+        self.owner = owner      # never sent to the browser
+        self.sha256 = sha256    # used to spot the same user uploading the same file twice
+        self.chunks = chunks
+        self.vectors = embed([c.text for c in chunks])
+
+    def search(self, question: str, top_k: int = 4) -> list[Citation]:
+        """Two-stage retrieval: embeddings pick candidates, the re-ranker picks the best."""
+        scores = self.vectors @ embed([question])[0]
+        candidates = [i for i in np.argsort(-scores)[:CANDIDATES] if scores[i] >= MIN_SCORE]
+        if not candidates:
+            return []
+        rerank_scores = rerank(question, [self.chunks[i].text for i in candidates])
+        ranked = sorted(zip(candidates, rerank_scores), key=lambda x: -x[1])
+        return [
+            Citation(page=self.chunks[i].page, snippet=self.chunks[i].text, score=s)
+            for i, s in ranked[:top_k]
+            if s >= RERANK_MIN
+        ]
+
+
+class Library:
+    def __init__(self, root: Path):
+        self.root = root
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.docs: dict[str, Document] = {}
+        for meta_path in sorted(root.glob("*/*.json")):
+            meta = json.loads(meta_path.read_text())
+            data = (meta_path.parent / f"{meta['doc_id']}.pdf").read_bytes()
+            self._index(meta["owner"], meta["doc_id"], meta["filename"], meta["uploaded_at"], data)
+
+    # ------------------------------------------------------------ reads (always scoped to an owner)
+
+    def list(self, owner: str) -> list[DocumentInfo]:
+        return sorted((d.info for d in self.docs.values() if d.owner == owner), key=lambda i: i.uploaded_at)
+
+    def get(self, owner: str, doc_id: str) -> Document:
+        """The ONLY way to reach a document. Wrong owner and unknown id raise the same KeyError."""
+        doc = self.docs.get(doc_id) if DOC_ID_RE.match(doc_id) else None
+        if doc is None or doc.owner != owner:
+            raise KeyError(doc_id)
+        return doc
+
+    def pdf_path(self, owner: str, doc_id: str) -> Path:
+        doc = self.get(owner, doc_id)
+        return self._dir(doc.owner) / f"{doc_id}.pdf"
+
+    # ------------------------------------------------------------ writes
+
+    def add(self, owner: str, filename: str, data: bytes) -> DocumentInfo:
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise ValueError(f"That PDF is over {MAX_UPLOAD_BYTES // (1024 * 1024)} MB. Upload a smaller file.")
+        sha256 = hashlib.sha256(data).hexdigest()
+        for doc in self.docs.values():  # same user, same file: reuse it (only ever compared within one owner)
+            if doc.owner == owner and doc.sha256 == sha256:
+                return doc.info
+        if len(self.list(owner)) >= MAX_DOCS_PER_USER:
+            raise ValueError(f"You can keep up to {MAX_DOCS_PER_USER} PDFs. Delete one to upload another.")
+
+        doc_id = secrets.token_hex(8)
+        uploaded_at = datetime.now(timezone.utc).isoformat()
+        info = self._index(owner, doc_id, _safe_name(filename), uploaded_at, data)  # raises PDFError before saving
+        folder = self._dir(owner)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{doc_id}.pdf").write_bytes(data)
+        meta = {"doc_id": doc_id, "owner": owner, "filename": info.filename, "uploaded_at": uploaded_at}
+        (folder / f"{doc_id}.json").write_text(json.dumps(meta))
+        return info
+
+    def delete(self, owner: str, doc_id: str) -> None:
+        self.get(owner, doc_id)  # ownership check first
+        folder = self._dir(owner)
+        for suffix in (".pdf", ".json"):
+            (folder / f"{doc_id}{suffix}").unlink(missing_ok=True)
+        del self.docs[doc_id]
+        if folder.exists() and not any(folder.iterdir()):
+            shutil.rmtree(folder)
+
+    def expire(self, older_than: datetime) -> list[tuple[str, str]]:
+        """Delete every PDF uploaded before `older_than` (for public demos). Returns (owner, doc_id) pairs."""
+        old = [(d.owner, d.info.doc_id) for d in self.docs.values() if datetime.fromisoformat(d.info.uploaded_at) < older_than]
+        for owner, doc_id in old:
+            self.delete(owner, doc_id)
+        return old
+
+    def transfer(self, from_owner: str, to_owner: str) -> int:
+        """Move a guest's PDFs into the account they just signed in to. Returns how many moved.
+
+        Only ever called with the guest id from the browser's own signed cookie, so a
+        person can only bring along documents they uploaded themselves.
+        """
+        moved = 0
+        src, dst = self._dir(from_owner), self._dir(to_owner)
+        for doc in [d for d in self.docs.values() if d.owner == from_owner]:
+            doc_id = doc.info.doc_id
+            if any(d.owner == to_owner and d.sha256 == doc.sha256 for d in self.docs.values()):
+                self.delete(from_owner, doc_id)  # the account already has this file
+                continue
+            dst.mkdir(parents=True, exist_ok=True)
+            (src / f"{doc_id}.pdf").rename(dst / f"{doc_id}.pdf")
+            meta = json.loads((src / f"{doc_id}.json").read_text()) | {"owner": to_owner}
+            (dst / f"{doc_id}.json").write_text(json.dumps(meta))
+            (src / f"{doc_id}.json").unlink()
+            doc.owner = to_owner
+            moved += 1
+        if src.exists() and not any(src.iterdir()):
+            shutil.rmtree(src)
+        return moved
+
+    # ------------------------------------------------------------ internals
+
+    def _dir(self, owner: str) -> Path:
+        if not USER_ID_RE.match(owner):  # owner ids become folder names, so they must be plain hex
+            raise ValueError("invalid owner id")
+        return self.root / owner
+
+    def _index(self, owner: str, doc_id: str, filename: str, uploaded_at: str, data: bytes) -> DocumentInfo:
+        chunks, pages = chunk_pdf(doc_id, data)
+        info = DocumentInfo(doc_id=doc_id, filename=filename, pages=pages, chunks=len(chunks), uploaded_at=uploaded_at)
+        self.docs[doc_id] = Document(info, owner, hashlib.sha256(data).hexdigest(), chunks)
+        return info
+
+
+def _safe_name(filename: str) -> str:
+    """Display name only (files are stored by id), but keep it short and free of path parts."""
+    name = Path(filename or "document.pdf").name
+    return name[:120] or "document.pdf"

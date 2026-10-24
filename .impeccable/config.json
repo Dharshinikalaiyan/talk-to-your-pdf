@@ -1,0 +1,20 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "instrument serif",
+        "createdAt": "2026-10-24T09:46:31.629Z",
+        "reason": "Claude: deliberately chosen to match the user's reference recording (italic serif + tall serif capitals), which the user asked this UI to be inspired by"
+      },
+      {
+        "rule": "overused-font",
+        "value": "plus jakarta sans",
+        "createdAt": "2026-10-24T10:43:29.139Z",
+        "reason": "Claude: the user rejected the previous distinctive serif as 'not professional' and asked for a professional face; a clean, familiar sans is the intended choice"
+      }
+    ]
+  }
+}
