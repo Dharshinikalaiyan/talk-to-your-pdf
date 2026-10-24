@@ -18,7 +18,7 @@ Upload a PDF and ask questions about it by typing or speaking. Answers come only
 ```bash
 cd project2-pdf-assistant   # this folder
 ../.venv/bin/uvicorn api:app --port 8766   # then open http://127.0.0.1:8766
-../.venv/bin/pytest -q                     # 73 tests
+../.venv/bin/pytest -q                     # 81 tests
 ../.venv/bin/python make_sample_pdf.py     # rebuild the sample manual
 ```
 
@@ -124,6 +124,7 @@ question → library.search: embeddings pick 8 candidates → re-ranker keeps th
 | `web/local/backend.js` | Answers the app's `/api/...` requests inside the page, storing PDFs and chats in IndexedDB |
 | `pdf_assistant/history.py` | Saved chats like ChatGPT ("+ New chat", a sidebar of earlier chats), private per user, stored without document text |
 | `pdf_assistant/library.py` (search) | Hybrid retrieval: codes in the question (`PO-2026-0062`, `E07`) must match exactly, so only those pages are searched; then embeddings + re-ranker by meaning. Fixes look-alike pages in templated documents |
+| `Document.summarize` (library.py) | Extractive summaries without a language model: the "centre of meaning" of all passages, Maximal Marginal Relevance for variety, then each passage's most central sentence, in page order |
 | `pdf_assistant/answering.py` | Engine chain Claude → Groq → local, grounded prompting with page citations, graceful fallback |
 | `pdf_assistant/voice.py` | Speech-to-text, and making text sound natural when spoken |
 | `api.py` | Upload, ask, voice and file-preview endpoints |

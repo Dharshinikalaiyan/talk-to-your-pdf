@@ -6,7 +6,7 @@
 // visitor's library is private by construction.
 
 import * as T from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
-import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError, identifiers, withoutIdentifiers } from "./engine.js";
+import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError, identifiers, withoutIdentifiers, wantsSummary, summarize } from "./engine.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_DOCS = 100;
@@ -163,7 +163,13 @@ async function chat({ message, doc_id, conv_id }, via = "text") {
   if (doc_id && !current) throw new HttpError("Document not found in your library.");
   const r = route(message, docs.map(info), current ? info(current) : null);
   let ans;
-  if (r.askDoc) {
+  if (r.askDoc && wantsSummary(message)) {
+    const doc = docs.find((d) => d.doc_id === r.askDoc.doc_id);
+    const points = await summarize(models, doc);
+    const text = `Here's a quick summary of ${docTitle(doc)}:\n` + points.map((p) => `• ${p.snippet} [p. ${p.page}]`).join("\n");
+    ans = { question: message, answer: text, citations: [], engine: "local", highlight: "", note: "Picked from the document's most representative passages, in page order.",
+      spoken: cleanForSpeech(points.map((p) => p.snippet).join(" ")), kind: "summary", doc_id: doc.doc_id, open_doc: r.openDoc || null, choices: [], pending: "" };
+  } else if (r.askDoc) {
     const doc = docs.find((d) => d.doc_id === r.askDoc.doc_id);
     const q = r.question || message;   // the PDF's name taken out
     const citations = await search(models, doc, q);

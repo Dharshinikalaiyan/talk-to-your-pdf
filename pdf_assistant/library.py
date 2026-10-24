@@ -67,6 +67,13 @@ def _contains(text: str, ident: str) -> bool:
     return re.search(rf"(?<![\w-]){re.escape(ident)}(?![\w-])", text) is not None
 
 
+def _prose(sentence: str) -> bool:
+    """A real sentence rather than a table row: mostly words, not numbers and amounts."""
+    tokens = sentence.split()
+    numeric = sum(any(ch.isdigit() for ch in t) for t in tokens)
+    return len(tokens) >= 6 and numeric / len(tokens) < 0.25 and sentence[:1].isupper()
+
+
 class Document:
     def __init__(self, info: DocumentInfo, owner: str, sha256: str, chunks: list[Chunk]):
         self.info = info
@@ -105,6 +112,42 @@ class Document:
         # the re-ranker is unsure
         kept = [(i, s) for i, s in ranked[:top_k] if s >= RERANK_MIN] or (ranked[:1] if ids else [])
         return [Citation(page=self.chunks[i].page, snippet=self.chunks[i].text, score=s) for i, s in kept]
+
+
+    def summarize(self, points: int = 5) -> list[Citation]:
+        """An extractive summary: the document's most representative sentences, in page order.
+
+        1. The mean of all passage vectors is the document's "centre of meaning".
+        2. Pick passages close to that centre but different from each other (Maximal Marginal
+           Relevance), so the summary covers the main topics instead of repeating one.
+        3. From each, keep the sentence closest to the centre.
+        No language model writes anything, so every line is the document's own words.
+        """
+        prose = np.array([any(_prose(x.strip().split("\n")[-1]) for x in re.split(r"(?<=[.!?])\s+", c.text)) for c in self.chunks])
+        centre = self.vectors.mean(axis=0)
+        centre /= np.linalg.norm(centre) or 1
+        relevance = np.where(prose, self.vectors @ centre, -np.inf) if prose.any() else self.vectors @ centre
+        chosen: list[int] = []
+        while len(chosen) < min(points, len(self.chunks)):
+            if chosen:
+                overlap = (self.vectors @ self.vectors[chosen].T).max(axis=1)
+                score = 0.65 * relevance - 0.35 * overlap
+                score[chosen] = -np.inf
+            else:
+                score = relevance
+            chosen.append(int(np.argmax(score)))
+        out = []
+        for i in sorted(chosen, key=lambda k: (self.chunks[k].page, k)):
+            # whole sentences of prose: drop a heading glued to the front ("Safety\nOnly a ...") and
+            # number-heavy table rows ("1 Packaging bundles 12 bundle $30.90 ...")
+            sentences = [x.strip().split("\n")[-1] for x in re.split(r"(?<=[.!?])\s+", self.chunks[i].text)]
+            sentences = [x for x in sentences if len(x) > 30 and _prose(x)]
+            if not sentences:
+                continue
+            best = sentences[int(np.argmax(embed(sentences) @ centre))] if len(sentences) > 1 else sentences[0]
+            if best not in (c.snippet for c in out):
+                out.append(Citation(page=self.chunks[i].page, snippet=best, score=float(relevance[i])))
+        return out
 
 
 class Library:

@@ -208,6 +208,15 @@ def _leftover(message: str, name_hits: set[str]) -> list[str]:
     return [m for m in words(message) if m not in FILLER and not any(_same(m, t) for t in name_hits)]
 
 
+# "summarise this" / "what is it about": answered with a summary instead of a search
+SUMMARY = re.compile(r"\b(summar(y|ies|ise|ize|ised|ized|ising|izing)|overview|tl ?dr|key points|main points|key takeaways|gist|highlights"
+                     r"|what (is|s) (this|it|the)( document| pdf| file| booklet| manual)?( all)? about|whats in (this|the) (pdf|document|file))\b")
+
+
+def wants_summary(message: str) -> bool:
+    return bool(SUMMARY.search(" ".join(words(message))))
+
+
 # ---------------------------------------------------------------- the router
 
 

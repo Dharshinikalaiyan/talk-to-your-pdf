@@ -614,3 +614,34 @@ def test_codes_pick_the_exact_page_and_values_come_from_the_right_row(orders, qu
 
 def test_a_code_that_isnt_in_the_document_is_not_found(orders):
     assert orders.search("What is the total cost of PO-2026-0999?") == []
+
+
+# ---------------------------------------------------------------- summaries
+
+@pytest.mark.parametrize("message, expected", [
+    ("Summarise this", True), ("what is this document about?", True), ("Give me an overview", True),
+    ("key points please", True), ("How long is the warranty?", False), ("What does error E07 mean?", False),
+])
+def test_summary_requests_are_recognised(message, expected):
+    from pdf_assistant.conversation import wants_summary
+
+    assert wants_summary(message) is expected
+
+
+def test_summary_is_the_documents_own_sentences_in_page_order(doc):
+    points = doc.summarize()
+    pages = [p.page for p in points]
+    assert len(points) >= 3 and pages == sorted(pages) and len(set(pages)) >= 3   # covers several topics
+    text = " ".join(c.text for c in doc.chunks)
+    assert all(p.snippet in text for p in points)                                   # nothing invented
+
+
+def test_summary_through_the_chat(sample_pdf, tmp_path, monkeypatch):
+    import api
+
+    _isolate_api(api, tmp_path, monkeypatch)
+    client = TestClient(api.app)
+    client.post("/api/documents", files={"file": ("Helios manual.pdf", sample_pdf, "application/pdf")})
+    ans = client.post("/api/chat", json={"message": "Summarise this document"}).json()
+    assert ans["kind"] == "summary" and ans["answer"].count("•") >= 3 and "[p. 5]" in ans["answer"]
+    assert "[p." not in ans["spoken"]

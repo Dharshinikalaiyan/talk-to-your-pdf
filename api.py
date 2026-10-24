@@ -69,7 +69,7 @@ from authlib.integrations.starlette_client import OAuthError
 from pdf_assistant import auth
 from pdf_assistant.answering import GROQ_MODEL, generate_answer
 from pdf_assistant.audit import AuditLog
-from pdf_assistant.conversation import route
+from pdf_assistant.conversation import route, wants_summary
 from pdf_assistant.history import ChatHistory
 from pdf_assistant.library import Document, identifiers, without_identifiers
 from pdf_assistant.models import Answer, DocumentInfo
@@ -396,6 +396,15 @@ def _chat(user: str, message: str, doc_id: str | None, latency: dict[str, float]
     """Route a message: small talk / help / picking a PDF, or a question answered from a PDF."""
     current = _doc(user, doc_id, action).info if doc_id else None
     r = route(message, library.list(user), current)
+    if r.ask_doc and wants_summary(message):
+        doc = library.get(user, r.ask_doc.doc_id)
+        points = doc.summarize()
+        text = "Here's a quick summary of " + doc.info.filename.rsplit(".", 1)[0] + ":\n" + "\n".join(
+            f"• {p.snippet} [p. {p.page}]" for p in points)
+        audit.record(user, f"{action}_summary", doc.info.doc_id, detail=message[:200])
+        return Answer(question=message, answer=text, citations=[], kind="summary", doc_id=doc.info.doc_id,
+                      open_doc=r.open_doc, note="Picked from the document's most representative passages, in page order.",
+                      spoken=clean_for_speech(" ".join(p.snippet for p in points)), latency=latency)
     if r.ask_doc:
         answer = _answer(user, library.get(user, r.ask_doc.doc_id), r.question or message, latency, ip, action)
         answer.question = message

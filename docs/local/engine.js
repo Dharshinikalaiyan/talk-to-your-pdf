@@ -300,6 +300,56 @@ export function cleanForSpeech(text) {
   return text.replace(/^\([^)]*\)\s*/, "").replace(/\s*\[p\.\s*\d+\]/g, "").replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim();
 }
 
+// ---------------------------------------------------------------- summaries (port of Document.summarize)
+
+const SUMMARY = /\b(summar(y|ies|ise|ize|ised|ized|ising|izing)|overview|tl ?dr|key points|main points|key takeaways|gist|highlights|what (is|s) (this|it|the)( document| pdf| file| booklet| manual)?( all)? about|whats in (this|the) (pdf|document|file))\b/;
+export const wantsSummary = (message) => SUMMARY.test(words(message).join(" "));
+
+/** A real sentence rather than a table row: mostly words, not numbers and amounts. */
+function prose(sentence) {
+  const tokens = sentence.split(/\s+/).filter(Boolean);
+  const numeric = tokens.filter((t) => /\d/.test(t)).length;
+  return tokens.length >= 6 && numeric / tokens.length < 0.25 && /^[A-Z]/.test(sentence);
+}
+const sentencesOf = (text) => text.split(/(?<=[.!?])\s+/).map((x) => x.trim().split("\n").pop());
+
+/** An extractive summary: the document's most representative sentences, in page order.
+ *  The mean of all passage vectors is its "centre of meaning"; pick passages close to it but
+ *  different from each other (Maximal Marginal Relevance), then each one's most central sentence. */
+export async function summarize(models, doc, points = 5) {
+  const dim = doc.vectors[0].length, centre = new Float32Array(dim);
+  for (const v of doc.vectors) for (let d = 0; d < dim; d++) centre[d] += v[d];
+  const norm = Math.hypot(...centre) || 1;
+  for (let d = 0; d < dim; d++) centre[d] /= norm;
+  const hasProse = doc.chunks.map((c) => sentencesOf(c.text).some(prose));
+  const anyProse = hasProse.some(Boolean);
+  const relevance = doc.vectors.map((v, i) => (anyProse && !hasProse[i] ? -Infinity : dot(v, centre)));
+  const chosen = [];
+  while (chosen.length < Math.min(points, doc.chunks.length)) {
+    let best = -1, bestScore = -Infinity;
+    for (let i = 0; i < doc.chunks.length; i++) {
+      if (chosen.includes(i) || relevance[i] === -Infinity) continue;
+      const overlap = chosen.length ? Math.max(...chosen.map((k) => dot(doc.vectors[i], doc.vectors[k]))) : 0;
+      const score = chosen.length ? 0.65 * relevance[i] - 0.35 * overlap : relevance[i];
+      if (score > bestScore) { bestScore = score; best = i; }
+    }
+    if (best < 0) break;
+    chosen.push(best);
+  }
+  const out = [];
+  for (const i of chosen.sort((a, b) => doc.chunks[a].page - doc.chunks[b].page || a - b)) {
+    const sentences = sentencesOf(doc.chunks[i].text).filter((x) => x.length > 30 && prose(x));
+    if (!sentences.length) continue;
+    let pick = sentences[0];
+    if (sentences.length > 1) {
+      const vs = await models.embed(sentences);
+      pick = sentences[vs.map((v) => dot(v, centre)).reduce((b, s, k, arr) => (s > arr[b] ? k : b), 0)];
+    }
+    if (!out.some((o) => o.snippet === pick)) out.push({ page: doc.chunks[i].page, snippet: pick, score: relevance[i] });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- the router (port of conversation.py)
 
 export const words = (text) => (text.toLowerCase().replace(/['’]/g, "").match(/[a-z0-9]+/g) || []);

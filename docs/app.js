@@ -678,7 +678,8 @@ function addBotMessage(ans, { restoring = false, spoken = false } = {}) {
   const li = document.createElement("li");
   li.className = `msg bot ${ans.kind === "chat" ? "talk" : ""}`;
   const top = ans.citations[0];
-  if (ans.kind !== "chat" && !top) li.classList.add("not-found");
+  if (ans.kind === "doc" && !top) li.classList.add("not-found");
+  if (ans.kind === "summary") li.classList.add("summary");
 
   if (top) {
     const chip = document.createElement("button");
