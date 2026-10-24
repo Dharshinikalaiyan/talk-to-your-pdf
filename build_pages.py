@@ -38,7 +38,10 @@ def build() -> Path:
 
     html = (WEB / "index.html").read_text()
     html = html.replace('"/static/', '"')                       # relative paths: the site lives under /<repo>/
-    html = html.replace('  <script src="app.js"></script>', BOOT + '  <script src="app.js"></script>')
+    # the flag must exist before any script runs (scene3d.js reads it too); module scripts
+    # like backend.js run after the classic ones, once PDF.js is loaded
+    first_script = html.index("  <script src=")
+    html = html[:first_script] + BOOT + html[first_script:]
     html = html.replace(
         "Type or use the mic · with ambient music · change it any time in Settings",
         "Runs entirely in your browser · your PDFs never leave this device",
