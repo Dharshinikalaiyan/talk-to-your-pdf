@@ -182,10 +182,15 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 /* wide screens: one width in both places, so moving between them is a pure transform.
    Keep in sync with placeScene() in app.js. */
 @media (min-width: 900px) { :root { --chat-w: clamp(440px, 42vw, 640px); } }
-.chat { position: fixed; z-index: 10; top: 76px; bottom: 0; left: calc(50% - var(--chat-w) / 2); width: var(--chat-w);
-  display: flex; flex-direction: column; color: var(--deep); transition: transform .9s cubic-bezier(.65, 0, .25, 1); }
+/* centred: a wide floating card. With a PDF: a narrower column on the right. The card's
+   width and position change together (one element, so the layout cost is small). */
+:root { --float-w: min(1500px, calc(100vw - 2 * var(--gutter))); }
+@media (min-width: 900px) { :root { --float-w: min(1500px, 86vw); } }
+.chat { position: fixed; z-index: 10; top: 76px; bottom: 16px; left: calc(50% - var(--float-w) / 2); width: var(--float-w);
+  display: flex; flex-direction: column; color: var(--deep);
+  transition: left .9s cubic-bezier(.65, 0, .25, 1), width .9s cubic-bezier(.65, 0, .25, 1); }
 /* with a PDF open: slide from the centre to the right edge */
-@media (min-width: 900px) { .with-pdf .chat { transform: translateX(calc(50vw - var(--chat-w) / 2 - var(--gutter))); } }
+@media (min-width: 900px) { .with-pdf .chat { left: calc(100% - var(--chat-w) - var(--gutter)); width: var(--chat-w); } }
 .entered .chat { animation: rise 1.2s var(--ease) .2s backwards; }
 .entry:not([hidden]) ~ .chat { visibility: hidden; }
 
@@ -194,9 +199,9 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .chat.fresh .logo-slot { height: clamp(170px, 34vh, 340px); }
 
 /* a soft frosted sheet keeps text readable over the sky */
-.sheet { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 30px 30px 0 0;
-  background: rgb(250 247 255 / .82); border: 1px solid rgb(255 255 255 / .8); border-bottom: 0;
-  box-shadow: 0 -20px 60px -30px rgb(40 10 100 / .45); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); }
+.sheet { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 30px;
+  background: rgb(250 247 255 / .82); border: 1px solid rgb(255 255 255 / .8);
+  box-shadow: 0 30px 80px -30px rgb(40 10 100 / .55); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); }
 
 /* which PDF we're talking about */
 .doc-bar { display: flex; align-items: center; gap: 8px; margin: 12px 12px 0; padding: 8px 8px 8px 10px; border-radius: 20px; background: #fff; border: 1px solid rgb(122 60 230 / .14); animation: rise .5s var(--ease) both; }
@@ -473,3 +478,10 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 /* the chats sidebar takes the PDF's place while it's open, instead of piling on top */
 .sidebar-open .drawer.open { opacity: 0; transform: translateX(-40px); pointer-events: none; transition-delay: 0s; }
 .library.sidebar { z-index: 26; width: min(380px, calc(100vw - 2 * var(--gutter))); }
+
+/* inside the wide card, the conversation keeps a comfortable reading width */
+.panel-scroll { padding-inline: max(28px, calc((100% - 860px) / 2)); }
+.suggest { padding-inline: max(20px, calc((100% - 860px) / 2)); }
+.composer { width: min(860px, calc(100% - 32px)); margin-inline: auto; }
+.doc-bar { width: calc(100% - 24px); max-width: 884px; align-self: center; }
+@media (max-width: 560px) { .chat { bottom: 8px; } .composer { width: calc(100% - 20px); } }
