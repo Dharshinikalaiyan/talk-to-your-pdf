@@ -339,7 +339,8 @@ function openDoc(info, { say = false } = {}) {
   closeHistory();
   const first = !state.doc;
   state.doc = info;
-  if ($("messages").children.length) addDivider(`Now talking about ${docTitle(info)}`);
+  // the "Opened …" message says it already; otherwise mark the switch with a divider
+  if ($("messages").children.length && !say) addDivider(`Now talking about ${docTitle(info)}`);
   if (say) addBotMessage({ kind: "chat", answer: `Opened ${docTitle(info)}. What would you like to know?`, spoken: "", citations: [], choices: [] });
   $("chat-doc").textContent = docTitle(info);
   $("chat-pages").textContent = `${info.pages} page${info.pages === 1 ? "" : "s"}`;
@@ -515,7 +516,7 @@ function showPdf(page, visible = true) {
 function jumpToPage(page, docId) {
   const doc = docId && state.docs.find((d) => d.doc_id === docId);
   if (docId && !doc) return toast("That PDF isn't in your library any more.", true);
-  if (doc && doc.doc_id !== state.doc?.doc_id) openDoc(doc);
+  if (doc && doc.doc_id !== state.doc?.doc_id) openDoc(doc, { say: true });
   showPdf(page);
 }
 
@@ -1219,7 +1220,7 @@ $("library-list").addEventListener("click", (e) => {
   const open = e.target.closest("[data-open]");
   if (open) {
     const doc = state.docs.find((d) => d.doc_id === open.dataset.open);
-    if (doc) openDoc(doc);
+    if (doc) openDoc(doc, { say: true });   // a message in the chat says which PDF is open now
     closeLibrary();
     return;
   }
