@@ -1101,7 +1101,9 @@ function voiceBar(mode, text) {
   $("composer").classList.toggle("voice-mode", !!mode);
   if (!mode) { delete bar.dataset.mode; return; }
   bar.dataset.mode = mode;
-  $("vb-text").textContent = text ?? { listening: "Listening… ask your question", thinking: "Thinking…", speaking: "Speaking…" }[mode];
+  // while it speaks, the moving bars say it all; no label
+  $("vb-text").textContent = text ?? { listening: "Listening… ask your question", thinking: "Thinking…", speaking: "" }[mode];
+  $("voice-bar").setAttribute("aria-label", mode === "speaking" ? "Reading the answer aloud" : "");
   $("vb-btn").hidden = mode !== "speaking";   // while listening, the mic button (■) sends
 }
 
