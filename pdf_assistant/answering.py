@@ -57,7 +57,59 @@ def _user_message(question: str, citations: list[Citation]) -> str:
 # ---------------------------------------------------------------- local (free)
 
 
+# Values laid out as label + value, which the reader model often gets wrong:
+#   a table row flattened into text   "Total order cost $6,246.18", "Tax (7%) $395.15"
+#   a form field                      "Vendor: Pioneer Digital Systems"
+TABLE_ROW = re.compile(r"([A-Z][A-Za-z0-9 ()%&/.,-]{1,48}?)\s+(-?[$€£₹]\s?[\d,]+(?:\.\d+)?)")
+# a field label is one or two words ("Vendor", "Order date"); its value runs to the next label
+FIELD = re.compile(r"(?<![\w])([A-Z][a-z]+(?: [a-z]+)?):\s+(.+?)(?=\s+[A-Z][a-z]+(?: [a-z]+)?:|\s+On\s|[.\n]|$)")
+STOP = {"the", "and", "what", "which", "how", "much", "many", "for", "of", "on", "in", "is", "are", "was", "a", "an",
+        "to", "does", "do", "this", "that", "with", "by", "from", "per", "purchase", "order", "who", "when", "where"}
+
+
+def _content_words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z]+", text.lower()) if len(w) >= 3 and w not in STOP]
+
+
+def table_value(question: str, passage: str) -> tuple[str, str] | None:
+    """A label/value pair whose label matches the question: "total cost" -> "Total order cost $6,246.18",
+    "subtotal" -> "Subtotal before discount and tax $13,280.20", "vendor" -> "Vendor: Pioneer Digital Systems".
+
+    A label matches when most of its words are in the question, or it starts with a word the
+    question asks about. Prefer the fuller match."""
+    asked = set(_content_words(question))
+    if "total" in asked:
+        asked.add("order")   # "total cost" also means "total order cost"
+    best = None
+    for pattern in (TABLE_ROW, FIELD):
+        for m in pattern.finditer(passage):
+            full, value = m.group(1).strip(" ,."), m.group(2).strip(" ,;")
+            if not value or len(value) > 80:
+                continue
+            # a table's column headings can run into the first row ("Amount Subtotal before ..."),
+            # so also try the label starting at each capitalised word
+            starts_at = [0] + [k.start() for k in re.finditer(r"(?<= )[A-Z]", full)]
+            for label in (full[i:] for i in starts_at):
+                words = _content_words(label)
+                if not words:
+                    continue
+                cover = len(set(words) & asked) / len(set(words))
+                starts = words[0] in asked
+                if cover >= 0.6 or starts:
+                    rank = (cover >= 0.6 and starts, cover, starts)
+                    if best is None or rank > best[0]:
+                        best = (rank, label, value.replace("$ ", "$"))
+    return (best[1], best[2]) if best else None
+
+
 def local_answer(question: str, citations: list[Citation]) -> Result:
+    # 0. A matching table row ("Tax (7%) $395.15") beats the reader on flattened tables.
+    for c in citations[:2]:
+        row = table_value(question, c.snippet)
+        if row:
+            label, value = row
+            return Result(text=f"{label}: {value} [p. {c.page}]", engine="local", highlight=value)
+
     # 1. Ask the reader for an exact answer span in the top 2 passages. Prefer the re-ranker's
     #    best passage; the second only wins if its answer is clearly more confident (reader
     #    scores of two plausible spans are often within a hair of each other).

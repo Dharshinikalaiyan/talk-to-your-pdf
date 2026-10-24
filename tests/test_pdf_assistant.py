@@ -555,3 +555,62 @@ def test_pdfs_over_100_pages_are_refused():
         pdf.cell(0, 10, f"Page {n + 1}")
     with pytest.raises(PDFError, match="101 pages. The limit is 100"):
         chunk_pdf("x", bytes(pdf.output()))
+
+
+# ---------------------------------------------------------------- templated documents (many look-alike pages)
+
+def _purchase_orders(n=8) -> bytes:
+    """A made-up templated PDF: same header/footer and table layout on every page, different codes and values."""
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=False)
+    for i in range(1, n + 1):
+        pdf.add_page()
+        pdf.set_font("Helvetica", size=9)
+        pdf.cell(0, 6, "SAMPLE - FICTIONAL PROCUREMENT DATA", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, f"Page {i} of {n}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 9, f"Purchase Order PO-2026-{i:04d}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", size=11)
+        pdf.cell(0, 7, f"Vendor: Vendor Number {i} Ltd Department: Finance", new_x="LMARGIN", new_y="NEXT")
+        pdf.multi_cell(0, 6, f"The supplier has agreed to payment terms of Net {15 * (i % 3 + 1)}, and the expected delivery period is {i + 3} days.",
+                       new_x="LMARGIN", new_y="NEXT")
+        for label, value in [("Subtotal before discount and tax", 1000 + i), ("Tax (7%)", 70 + i), ("Shipping and handling", 20 + i),
+                             ("Total order cost", 1090 + 3 * i)]:
+            pdf.cell(90, 7, label)
+            pdf.cell(0, 7, f"${value:,}.00", new_x="LMARGIN", new_y="NEXT")
+    return bytes(pdf.output())
+
+
+@pytest.fixture(scope="module")
+def orders(tmp_path_factory):
+    lib = Library(tmp_path_factory.mktemp("orders"))
+    info = lib.add(ALICE, "orders.pdf", _purchase_orders())
+    return lib.get(ALICE, info.doc_id)
+
+
+def test_running_headers_and_page_numbers_are_removed_but_titles_stay(orders):
+    text = " ".join(c.text for c in orders.chunks)
+    assert "FICTIONAL PROCUREMENT" not in text and "Page 3 of 8" not in text
+    assert "Purchase Order PO-2026-0003" in text and "Total order cost" in text   # repeated body labels stay
+
+
+@pytest.mark.parametrize("question, page, value", [
+    ("What payment terms apply to PO-2026-0005?", 5, "Net 45"),
+    ("What is the total cost of purchase order PO-2026-0006?", 6, "$1,108.00"),
+    ("What is the tax on PO-2026-0002?", 2, "$72.00"),
+    ("What is the subtotal for PO-2026-0007?", 7, "$1,007.00"),
+    ("Who is the vendor for PO-2026-0004?", 4, "Vendor Number 4 Ltd"),
+])
+def test_codes_pick_the_exact_page_and_values_come_from_the_right_row(orders, question, page, value):
+    from pdf_assistant.answering import local_answer
+    from pdf_assistant.library import identifiers, without_identifiers
+
+    citations = orders.search(question)
+    assert citations[0].page == page
+    assert local_answer(without_identifiers(question) if identifiers(question) else question, citations).highlight == value
+
+
+def test_a_code_that_isnt_in_the_document_is_not_found(orders):
+    assert orders.search("What is the total cost of PO-2026-0999?") == []

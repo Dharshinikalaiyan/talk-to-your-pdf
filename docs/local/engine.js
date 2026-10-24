@@ -42,17 +42,43 @@ export async function extractPages(pdfjs, data, onPage = () => {}) {
     throw new PDFError("This PDF couldn't be opened. It may be damaged; try exporting it again.");
   }
   if (pdf.numPages > MAX_PAGES) throw new PDFError(`This PDF has ${pdf.numPages} pages. The limit is ${MAX_PAGES}.`);
-  const pages = [];
+  const raw = [];
   for (let n = 1; n <= pdf.numPages; n++) {
     const content = await (await pdf.getPage(n)).getTextContent();
     let text = "";
     for (const item of content.items) text += (item.str ?? "") + (item.hasEOL ? "\n" : "");
-    pages.push(clean(text));
+    raw.push(text);
     onPage(n, pdf.numPages);
   }
   await pdf.destroy();
+  const pages = stripRepeatedLines(raw).map(clean);
   if (!pages.some(Boolean)) throw new PDFError("No selectable text found. This looks like a scanned PDF, which needs OCR (not supported yet).");
   return pages;
+}
+
+/** Remove running headers and footers ("ACME CONFIDENTIAL", "Page 16 of 100"): only lines at the
+ *  top/bottom edge of a page, repeated on at least half the pages or shaped like a page number.
+ *  Repeated lines in the body (table labels in a templated document) are content and stay. */
+export function stripRepeatedLines(pages) {
+  if (pages.length < 3) return pages;
+  const EDGE = 3;
+  const norm = (l) => l.trim().toLowerCase().replace(/\d+/g, "#");
+  const pageNo = /^(page\s*)?#(\s*(of|\/)\s*#)?$/;
+  const edges = (text) => { const ls = text.split("\n").filter((l) => l.trim()); return [...ls.slice(0, EDGE), ...ls.slice(-EDGE)]; };
+  const numbered = /\bpage\b|# of #|#\s*\/\s*#/;   // "... Page 16 of 100" once numbers are masked
+  const counts = new Map();
+  for (const text of pages) {
+    for (const l of new Set([...edges(text).map((x) => x.trim().toLowerCase()), ...edges(text).map(norm)])) counts.set(l, (counts.get(l) || 0) + 1);
+  }
+  const enough = Math.max(3, Math.floor(pages.length / 2));
+  const furniture = (l) => {
+    const n = norm(l);
+    return (counts.get(l.trim().toLowerCase()) || 0) >= enough || pageNo.test(n) || ((counts.get(n) || 0) >= enough && numbered.test(n));
+  };
+  return pages.map((text) => {
+    const edge = new Set(edges(text));
+    return text.split("\n").filter((l) => !(edge.has(l) && furniture(l))).join("\n");
+  });
 }
 
 export function clean(text) {
@@ -163,21 +189,91 @@ const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
 
 // ---------------------------------------------------------------- search + answer
 
-/** Two-stage retrieval inside ONE document: embeddings pick candidates, the re-ranker picks the best. */
+// A code/ID: letters and digits together, or digits with dashes ("PO-2026-0062", "E07", "INV/881").
+const ID_RE = /\b(?=[\w/-]*\d)(?=[\w/-]*[A-Za-z-])[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)*\b/g;
+export const identifiers = (q) => (q.match(ID_RE) || []).filter((m) => m.length >= 3).map((m) => m.toLowerCase());
+const containsId = (text, id) => new RegExp(`(?<![\\w-])${id.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}(?![\\w-])`).test(text);
+
+/** 'What payment terms apply to PO-2026-0062?' -> 'What payment terms apply?' (long codes only;
+ *  "E07" is part of the question). Once the code has picked the page, it's dropped so a passage
+ *  that merely repeats the code doesn't beat the one that answers what was asked. */
+export function withoutIdentifiers(question) {
+  const text = question.replace(ID_RE, (m) => (m.length >= 6 ? "" : m))
+    .replace(/\b(for|of|on|in|to|about)\s+(purchase order|order|invoice|item|code|error)?\s*(?=[?.!]*$)/i, "")
+    .replace(/\s+([?.!])/g, "$1").replace(/\s+/g, " ").trim();
+  return text || question;
+}
+
+/** Two-stage retrieval inside ONE document: embeddings pick candidates, the re-ranker picks the best.
+ *  Codes in the question must match exactly: only pages containing them are searched. */
 export async function search(models, doc, question, topK = 4) {
+  const ids = identifiers(question);
+  let pool = doc.chunks.map((_, i) => i);
+  if (ids.length) {
+    if (!doc.pageText) {
+      doc.pageText = new Map();
+      for (const c of doc.chunks) doc.pageText.set(c.page, (doc.pageText.get(c.page) || "") + " " + c.text.toLowerCase());
+    }
+    const pages = new Set([...doc.pageText].filter(([, t]) => ids.every((id) => containsId(t, id))).map(([p]) => p));
+    if (!pages.size) return [];
+    pool = pool.filter((i) => pages.has(doc.chunks[i].page));
+    question = withoutIdentifiers(question);
+  }
   const [q] = await models.embed([question]);
-  const scored = doc.vectors.map((v, i) => [i, dot(v, q)]).sort((x, y) => y[1] - x[1]);
-  const candidates = scored.slice(0, CANDIDATES).filter(([, s]) => s >= MIN_SCORE).map(([i]) => i);
+  const scored = pool.map((i) => [i, dot(doc.vectors[i], q)]).sort((x, y) => y[1] - x[1]);
+  const candidates = scored.slice(0, CANDIDATES).filter(([, s]) => ids.length || s >= MIN_SCORE).map(([i]) => i);
   if (!candidates.length) return [];
   const scores = await models.rerank(question, candidates.map((i) => doc.chunks[i].text));
-  return candidates.map((i, k) => [i, scores[k]]).sort((x, y) => y[1] - x[1]).slice(0, topK)
-    .filter(([, s]) => s >= RERANK_MIN)
-    .map(([i, s]) => ({ page: doc.chunks[i].page, snippet: doc.chunks[i].text, score: s }));
+  const ranked = candidates.map((i, k) => [i, scores[k]]).sort((x, y) => y[1] - x[1]);
+  // an exact code match is strong evidence: keep the best passage on that page even if the re-ranker is unsure
+  let kept = ranked.slice(0, topK).filter(([, s]) => s >= RERANK_MIN);
+  if (!kept.length && ids.length) kept = ranked.slice(0, 1);
+  return kept.map(([i, s]) => ({ page: doc.chunks[i].page, snippet: doc.chunks[i].text, score: s }));
+}
+
+// Values laid out as label + value, which the reader model often gets wrong:
+//   a table row flattened into text "Total order cost $6,246.18";  a form field "Vendor: Pioneer Digital Systems"
+const TABLE_ROW = /([A-Z][A-Za-z0-9 ()%&/.,-]{1,48}?)\s+(-?[$€£₹]\s?[\d,]+(?:\.\d+)?)/g;
+const FIELD = /(?<![\w])([A-Z][a-z]+(?: [a-z]+)?):\s+(.+?)(?=\s+[A-Z][a-z]+(?: [a-z]+)?:|\s+On\s|[.\n]|$)/g;
+const STOP = new Set(["the", "and", "what", "which", "how", "much", "many", "for", "of", "on", "in", "is", "are", "was", "a", "an",
+  "to", "does", "do", "this", "that", "with", "by", "from", "per", "purchase", "order", "who", "when", "where"]);
+const contentWords = (t) => (t.toLowerCase().match(/[a-z]+/g) || []).filter((w) => w.length >= 3 && !STOP.has(w));
+
+const better = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+
+/** A label/value pair whose label matches the question ("total cost" -> "Total order cost $6,246.18"). */
+export function tableValue(question, passage) {
+  const asked = new Set(contentWords(question));
+  if (asked.has("total")) asked.add("order");
+  let best = null;
+  for (const re of [TABLE_ROW, FIELD]) {
+    for (const m of passage.matchAll(re)) {
+      const full = m[1].trim().replace(/^[ ,.]+|[ ,.]+$/g, ""), value = m[2].trim().replace(/^[ ,;]+|[ ,;]+$/g, "");
+      if (!value || value.length > 80) continue;
+      // column headings can run into the first row ("Amount Subtotal before ..."): try each capitalised start
+      const starts = [0, ...[...full.matchAll(/(?<= )[A-Z]/g)].map((k) => k.index)];
+      for (const at of starts) {
+        const label = full.slice(at), words = contentWords(label);
+        if (!words.length) continue;
+        const uniq = new Set(words), cover = [...uniq].filter((w) => asked.has(w)).length / uniq.size, first = asked.has(words[0]);
+        if (cover >= 0.6 || first) {
+          const rank = [(cover >= 0.6 && first) ? 1 : 0, cover, first ? 1 : 0];
+          if (!best || better(rank, best.rank)) best = { rank, label, value: value.replace("$ ", "$") };
+        }
+      }
+    }
+  }
+  return best && { label: best.label, value: best.value };
 }
 
 /** Free, local answer: the reader's exact span, else the passage's 2 most relevant sentences. */
 export async function answer(models, question, citations) {
   if (!citations.length) return { text: NOT_FOUND, highlight: "" };
+  // a matching table row / form field beats the reader on flattened tables
+  for (const c of citations.slice(0, 2)) {
+    const row = tableValue(question, c.snippet);
+    if (row) return { text: `${row.label}: ${row.value} [p. ${c.page}]`, highlight: row.value };
+  }
   const spans = [];
   for (const c of citations.slice(0, 2)) {
     const s = await models.extract(question, c.snippet);

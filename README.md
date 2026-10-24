@@ -123,6 +123,7 @@ question → library.search: embeddings pick 8 candidates → re-ranker keeps th
 | `web/local/engine.js` | The browser edition's pipeline: PDF.js text → chunks → embeddings + re-ranker + reader (Transformers.js), and the chat router, ported from Python |
 | `web/local/backend.js` | Answers the app's `/api/...` requests inside the page, storing PDFs and chats in IndexedDB |
 | `pdf_assistant/history.py` | Saved chats like ChatGPT ("+ New chat", a sidebar of earlier chats), private per user, stored without document text |
+| `pdf_assistant/library.py` (search) | Hybrid retrieval: codes in the question (`PO-2026-0062`, `E07`) must match exactly, so only those pages are searched; then embeddings + re-ranker by meaning. Fixes look-alike pages in templated documents |
 | `pdf_assistant/answering.py` | Engine chain Claude → Groq → local, grounded prompting with page citations, graceful fallback |
 | `pdf_assistant/voice.py` | Speech-to-text, and making text sound natural when spoken |
 | `api.py` | Upload, ask, voice and file-preview endpoints |

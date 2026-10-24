@@ -6,7 +6,7 @@
 // visitor's library is private by construction.
 
 import * as T from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
-import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError } from "./engine.js?v=568fa2bb31";
+import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError, identifiers, withoutIdentifiers } from "./engine.js?v=9f5d1f881d";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_DOCS = 100;
@@ -32,7 +32,7 @@ function onProgress(p) {
 // The models run in a background worker so indexing a big PDF never freezes the page.
 // If this browser can't run module workers, they run here instead (slower, but it works).
 function workerModels() {
-  const worker = new Worker(new URL("./models-worker.js?v=1399f1a92f", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("./models-worker.js?v=0b41f79d81", import.meta.url), { type: "module" });
   const pending = new Map();
   let next = 0;
   worker.onmessage = ({ data }) => {
@@ -167,7 +167,7 @@ async function chat({ message, doc_id, conv_id }, via = "text") {
     const doc = docs.find((d) => d.doc_id === r.askDoc.doc_id);
     const q = r.question || message;   // the PDF's name taken out
     const citations = await search(models, doc, q);
-    const a = await answer(models, q, citations);
+    const a = await answer(models, identifiers(q).length ? withoutIdentifiers(q) : q, citations);
     ans = { question: message, answer: a.text, citations, engine: "local", highlight: a.highlight, note: "", spoken: cleanForSpeech(a.text),
       kind: "doc", doc_id: doc.doc_id, open_doc: r.openDoc || null, choices: [], pending: "" };
   } else {

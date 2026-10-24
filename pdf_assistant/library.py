@@ -45,6 +45,28 @@ MAX_DOCS_PER_USER = int(os.environ.get("MAX_DOCS_PER_USER", "100"))
 DOC_ID_RE = re.compile(r"^[0-9a-f]{16}$")
 
 
+# A code/ID: letters and digits together, or digits with dashes ("PO-2026-0062", "E07", "INV/881").
+ID_RE = re.compile(r"\b(?=[\w/-]*\d)(?=[\w/-]*[A-Za-z-])[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)*\b")
+
+
+def identifiers(question: str) -> list[str]:
+    return [m.lower() for m in ID_RE.findall(question) if len(m) >= 3]
+
+
+def without_identifiers(question: str) -> str:
+    """'What payment terms apply to PO-2026-0062?' -> 'What payment terms apply to?'
+
+    Once the code has picked the page, it's dropped from the question, so a passage that
+    merely repeats the code doesn't beat the one that answers what was asked."""
+    text = ID_RE.sub(lambda m: "" if len(m.group()) >= 6 else m.group(), question)   # long codes only; "E07" is part of the question
+    text = re.sub(r"\b(for|of|on|in|to|about)\s+(purchase order|order|invoice|item|code|error)?\s*(?=[?.!]*$)", "", text, flags=re.I)
+    return re.sub(r"\s+", " ", re.sub(r"\s+([?.!])", r"\1", text)).strip() or question
+
+
+def _contains(text: str, ident: str) -> bool:
+    return re.search(rf"(?<![\w-]){re.escape(ident)}(?![\w-])", text) is not None
+
+
 class Document:
     def __init__(self, info: DocumentInfo, owner: str, sha256: str, chunks: list[Chunk]):
         self.info = info
@@ -52,20 +74,37 @@ class Document:
         self.sha256 = sha256    # used to spot the same user uploading the same file twice
         self.chunks = chunks
         self.vectors = embed([c.text for c in chunks])
+        self.page_text: dict[int, str] = {}
+        for c in chunks:
+            self.page_text[c.page] = self.page_text.get(c.page, "") + " " + c.text.lower()
 
     def search(self, question: str, top_k: int = 4) -> list[Citation]:
-        """Two-stage retrieval: embeddings pick candidates, the re-ranker picks the best."""
-        scores = self.vectors @ embed([question])[0]
-        candidates = [i for i in np.argsort(-scores)[:CANDIDATES] if scores[i] >= MIN_SCORE]
+        """Two-stage retrieval: embeddings pick candidates, the re-ranker picks the best.
+
+        Codes and IDs in the question ("PO-2026-0062", "E07") must match exactly: meaning-based
+        search sees PO-2026-0062 and PO-2026-0058 as near-identical, so only pages that contain
+        the exact code are searched. No such page -> nothing found (instead of a look-alike).
+        """
+        ids = identifiers(question)
+        pool = np.arange(len(self.chunks))
+        if ids:
+            pages = {pg for pg, text in self.page_text.items() if all(_contains(text, i) for i in ids)}
+            if not pages:
+                return []
+            pool = np.array([i for i, c in enumerate(self.chunks) if c.page in pages])
+        if ids:
+            question = without_identifiers(question)
+        scores = self.vectors[pool] @ embed([question])[0]
+        order = pool[np.argsort(-scores)][:CANDIDATES]
+        candidates = [i for i, sc in zip(order, np.sort(scores)[::-1]) if ids or sc >= MIN_SCORE]
         if not candidates:
             return []
         rerank_scores = rerank(question, [self.chunks[i].text for i in candidates])
         ranked = sorted(zip(candidates, rerank_scores), key=lambda x: -x[1])
-        return [
-            Citation(page=self.chunks[i].page, snippet=self.chunks[i].text, score=s)
-            for i, s in ranked[:top_k]
-            if s >= RERANK_MIN
-        ]
+        # an exact code match is strong evidence: keep the best passage on that page even if
+        # the re-ranker is unsure
+        kept = [(i, s) for i, s in ranked[:top_k] if s >= RERANK_MIN] or (ranked[:1] if ids else [])
+        return [Citation(page=self.chunks[i].page, snippet=self.chunks[i].text, score=s) for i, s in kept]
 
 
 class Library:

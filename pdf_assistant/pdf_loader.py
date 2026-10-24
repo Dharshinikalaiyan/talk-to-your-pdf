@@ -38,10 +38,48 @@ def extract_pages(data: bytes) -> list[str]:
         raise PDFError("This PDF is password-protected. Remove the password and upload it again.")
     if len(reader.pages) > MAX_PAGES:
         raise PDFError(f"This PDF has {len(reader.pages)} pages. The limit is {MAX_PAGES}.")
-    pages = [_clean(page.extract_text() or "") for page in reader.pages]
+    pages = [_clean(text) for text in strip_repeated_lines([page.extract_text() or "" for page in reader.pages])]
     if not any(pages):
         raise PDFError("No selectable text found. This looks like a scanned PDF, which needs OCR (not supported yet).")
     return pages
+
+
+def strip_repeated_lines(pages: list[str]) -> list[str]:
+    """Remove running headers and footers ("ACME CONFIDENTIAL", "Page 16 of 100").
+
+    Only the first and last few lines of each page are considered (that's where page
+    furniture lives). One of those is dropped when the same line sits at the edge of at least
+    half the pages, or when it's a page number ("Page 16 of 100", "16/100"). Repeated lines in
+    the body, like table labels in a templated document, are real content and stay.
+    """
+    if len(pages) < 3:
+        return pages
+    EDGE = 3
+    norm = lambda line: re.sub(r"\d+", "#", line.strip().lower())
+    page_no = re.compile(r"^(page\s*)?#(\s*(of|/)\s*#)?$")
+
+    def edges(text: str) -> list[str]:
+        lines = [l for l in text.split("\n") if l.strip()]
+        return lines[:EDGE] + lines[-EDGE:]
+
+    numbered = re.compile(r"\bpage\b|# of #|#\s*/\s*#")   # "... Page 16 of 100" once numbers are masked
+    counts: dict[str, int] = {}
+    for text in pages:
+        for line in {l.strip().lower() for l in edges(text)} | {norm(l) for l in edges(text)}:
+            counts[line] = counts.get(line, 0) + 1
+    enough = max(3, len(pages) // 2)
+
+    def furniture(line: str) -> bool:
+        n = norm(line)
+        return (counts.get(line.strip().lower(), 0) >= enough            # identical on many pages
+                or bool(page_no.match(n))                                 # just a page number
+                or (counts.get(n, 0) >= enough and bool(numbered.search(n))))   # header + page number
+
+    def keep(text: str) -> str:
+        edge = set(edges(text))
+        return "\n".join(l for l in text.split("\n") if not (l in edge and furniture(l)))
+
+    return [keep(text) for text in pages]
 
 
 def _clean(text: str) -> str:

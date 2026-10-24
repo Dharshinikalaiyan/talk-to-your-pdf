@@ -71,7 +71,7 @@ from pdf_assistant.answering import GROQ_MODEL, generate_answer
 from pdf_assistant.audit import AuditLog
 from pdf_assistant.conversation import route
 from pdf_assistant.history import ChatHistory
-from pdf_assistant.library import Document
+from pdf_assistant.library import Document, identifiers, without_identifiers
 from pdf_assistant.models import Answer, DocumentInfo
 from pdf_assistant.pdf_loader import PDFError
 from pdf_assistant.tenancy import SESSION_DAYS, Identity, SessionSigner, account_id, load_secret, new_guest
@@ -219,7 +219,9 @@ def _answer(user: str, doc: Document, question: str, latency: dict[str, float], 
     t = time.perf_counter()
     # Only spend a cloud slot when there is something to answer and a cloud engine is on.
     allow_cloud = bool(citations) and _cloud_enabled() and _take_cloud_slot(ip)
-    result = generate_answer(question, citations, allow_cloud=allow_cloud)
+    # once a code (PO-2026-0062) has picked the page, answer the rest of the question
+    asked = without_identifiers(question) if identifiers(question) else question
+    result = generate_answer(asked, citations, allow_cloud=allow_cloud)
     latency["answer"] = time.perf_counter() - t
     audit.record(user, action, doc.info.doc_id, detail=f"{question} | pages {[c.page for c in citations]} | {result.engine}")
     return Answer(

@@ -3,7 +3,7 @@
 // gets {id, result} or {id, error} back; download progress is forwarded as {type: "progress"}.
 
 import * as T from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
-import { createModels } from "./engine.js?v=568fa2bb31";
+import { createModels } from "./engine.js?v=9f5d1f881d";
 
 T.env.allowLocalModels = false;
 const models = createModels(T, { onProgress: (p) => postMessage({ type: "progress", p }) });
