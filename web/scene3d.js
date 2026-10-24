@@ -322,7 +322,7 @@
       this.reflection.scale.set(s, -s, s);
       // the reflection belongs to the big logo above the lake; it fades as the logo shrinks
       this.fade = (this.fade || 0) + ((this.fadeTarget || 0) - (this.fade || 0)) * (still ? 1 : 0.06);
-      u.uOpacity.value = 0.95 * (1 - 0.86 * this.fade);
+      u.uOpacity.value = 0.95 * (1 - 0.7 * this.fade);   // watermark: ~30% strength
       this.dust.material.opacity = 0.55 * (1 - this.fade);
       this.reflectOpacity.value = 0.16 * Math.max(0, Math.min(1, (s - 0.45) / 0.25)) * (1 - this.fade);
       this.reflection.visible = this.reflectOpacity.value > 0.005;
