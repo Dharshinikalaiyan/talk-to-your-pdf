@@ -182,13 +182,12 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 /* wide screens: one width in both places, so moving between them is a pure transform.
    Keep in sync with placeScene() in app.js. */
 @media (min-width: 900px) { :root { --chat-w: clamp(440px, 42vw, 640px); } }
-/* centred: a wide floating card. With a PDF: a narrower column on the right. The card's
-   width and position change together (one element, so the layout cost is small). */
+/* centred: a wide floating card. With a PDF: a narrower column on the right. The card
+   jumps to its new place unseen and glides in (opacity + transform only, see .arrive). */
 :root { --float-w: min(1500px, calc(100vw - 2 * var(--gutter))); }
 @media (min-width: 900px) { :root { --float-w: min(1500px, 86vw); } }
 .chat { position: fixed; z-index: 10; top: 76px; bottom: 16px; left: calc(50% - var(--float-w) / 2); width: var(--float-w);
-  display: flex; flex-direction: column; color: var(--deep);
-  transition: left .9s cubic-bezier(.65, 0, .25, 1), width .9s cubic-bezier(.65, 0, .25, 1); }
+  display: flex; flex-direction: column; color: var(--deep); }
 /* with a PDF open: slide from the centre to the right edge */
 @media (min-width: 900px) { .with-pdf .chat { left: calc(100% - var(--chat-w) - var(--gutter)); width: var(--chat-w); } }
 .entered .chat { animation: rise 1.2s var(--ease) .2s backwards; }
@@ -485,3 +484,7 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .composer { width: min(860px, calc(100% - 32px)); margin-inline: auto; }
 .doc-bar { width: calc(100% - 24px); max-width: 884px; align-self: center; }
 @media (max-width: 560px) { .chat { bottom: 8px; } .composer { width: calc(100% - 20px); } }
+
+/* moving between centre and right: fade + slide in from the side it came from */
+.chat.arrive { animation: chat-arrive .75s var(--ease) both; }
+@keyframes chat-arrive { from { opacity: 0; transform: translateX(var(--from, 40px)) scale(.985); } }

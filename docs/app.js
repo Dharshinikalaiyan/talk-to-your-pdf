@@ -308,6 +308,7 @@ function openDoc(info, { say = false } = {}) {
   $("doc-bar").hidden = false;
   if (first) ambient?.whoosh(true);
   scene?.burst();
+  if (first) relocateChat("-60px");
   document.body.classList.add("with-pdf");
   showPdf(1, wide());
   closeLibrary();
@@ -327,6 +328,7 @@ function closeDoc() {
   addDivider(`Closed ${docTitle(state.doc)}`);
   state.doc = null;
   document.body.classList.remove("with-pdf");
+  relocateChat("60px");
   $("doc-bar").hidden = true;
   closePreview();
   ambient?.whoosh(false);
@@ -344,6 +346,17 @@ function closeDoc() {
 function slideIn(el) {
   void el.offsetWidth;
   el.classList.add("open");
+}
+
+// The chat card changes size and place when a PDF opens or closes; instead of animating
+// its width, it appears in the new place and glides in from the side it came from.
+function relocateChat(from) {
+  if (!wide() || reduced()) return;
+  const c = $("workspace");
+  c.style.setProperty("--from", from);
+  c.classList.remove("arrive");
+  void c.offsetWidth;
+  c.classList.add("arrive");
 }
 
 function escapeHtml(s) {
