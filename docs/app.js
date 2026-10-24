@@ -1099,15 +1099,15 @@ function followVoice() {
   requestAnimationFrame(followVoice);
 }
 
-// The voice bar above the ask bar: listening (what it hears), thinking, or speaking (Stop).
+// The ask bar's voice view: listening (what it hears), thinking, or speaking (with Stop).
 function voiceBar(mode, text) {
   const bar = $("voice-bar");
   bar.hidden = !mode;
-  if (!mode) return;
+  $("composer").classList.toggle("voice-mode", !!mode);
+  if (!mode) { delete bar.dataset.mode; return; }
   bar.dataset.mode = mode;
-  $("vb-text").textContent = text ?? { listening: "Listening… go ahead, ask your question.", thinking: "Thinking…", speaking: "Speaking the answer…" }[mode];
-  $("vb-btn").hidden = mode === "thinking";
-  $("vb-btn").textContent = mode === "speaking" ? "Stop" : "Send";
+  $("vb-text").textContent = text ?? { listening: "Listening… ask your question", thinking: "Thinking…", speaking: "Speaking…" }[mode];
+  $("vb-btn").hidden = mode !== "speaking";   // while listening, the mic button (■) sends
 }
 
 $("vb-btn").addEventListener("click", () => {

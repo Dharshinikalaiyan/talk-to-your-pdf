@@ -140,18 +140,18 @@
       <ol class="messages" id="messages" aria-live="polite"></ol>
     </div>
     <p class="error" id="error" role="alert" hidden></p>
-    <!-- live voice status: what it hears while you talk, and a Stop button while it answers -->
-    <div class="voice-bar" id="voice-bar" role="status" aria-live="polite" hidden>
-      <span class="vb-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-      <span class="vb-text" id="vb-text">Listening…</span>
-      <button class="vb-btn" id="vb-btn" type="button">Send</button>
-    </div>
     <div class="suggest" id="suggest" aria-label="Suggestions"></div>
     <form class="composer" id="composer">
       <button class="speak-btn" id="speak-btn" type="button" aria-pressed="false" aria-label="Read answers aloud"><svg aria-hidden="true"><use href="#i-mute"/></svg></button>
       <input type="checkbox" id="speak" class="visually-hidden" tabindex="-1">
       <label class="visually-hidden" for="question">Your message</label>
       <textarea id="question" rows="1" placeholder="Say hi, name a PDF, or ask a question…"></textarea>
+      <!-- while you talk (or it answers), the box shows a live voice view instead of the text field -->
+      <div class="voice-bar" id="voice-bar" role="status" aria-live="polite" hidden>
+        <span class="vb-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="vb-text" id="vb-text">Listening…</span>
+        <button class="vb-btn" id="vb-btn" type="button">Stop</button>
+      </div>
       <button class="mic" id="mic" type="button" aria-pressed="false" aria-describedby="mic-hint"><svg aria-hidden="true"><use href="#i-mic"/></svg></button>
       <button class="send" type="submit" aria-label="Send"><svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
     </form>
