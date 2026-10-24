@@ -292,6 +292,8 @@
     setMode(mode) { this.mode = ["idle", "listening", "thinking", "speaking"].includes(mode) ? mode : "idle"; if (this.ok && reduceMotion()) this._draw(0, true); }
     burst() { this.burstT = this.t; }
     setPaused(on) { this.paused = on; }
+    /** Light the watermark up fully for a moment (a new question was asked). */
+    flash() { this.flashT = this.t; this.beat(1); this.burst(); }
     /** 0 = the full logo; 1 = a faint watermark (drawn over the chat card, so kept very light). */
     setFade(f) { this.fadeTarget = f; document.documentElement.classList.toggle("logo-watermark", f > 0.5); if (this.ok && reduceMotion()) this._draw(0, true); }
     beat(strength = 0.7) { this.pulse = Math.max(this.pulse, Math.min(1, strength)); }
@@ -321,7 +323,12 @@
       this.reflection.position.set(x, 2 * waterY - y, 0);
       this.reflection.scale.set(s, -s, s);
       // the reflection belongs to the big logo above the lake; it fades as the logo shrinks
-      this.fade = (this.fade || 0) + ((this.fadeTarget || 0) - (this.fade || 0)) * (still ? 1 : 0.06);
+      // the watermark brightens while you talk to it or it talks back, and flashes on a new question
+      const active = m === "listening" || m === "speaking" ? 0.45 : 1;
+      const since = this.t - (this.flashT ?? -99);
+      const flash = since < 0.35 ? 1 : Math.max(0, 1 - (since - 0.35) / 1.4);
+      const fadeGoal = (this.fadeTarget || 0) * active * (1 - flash);
+      this.fade = (this.fade || 0) + (fadeGoal - (this.fade || 0)) * (still ? 1 : flash > 0.9 ? 0.25 : 0.06);
       u.uOpacity.value = 0.95 * (1 - 0.7 * this.fade);   // watermark: ~30% strength
       this.dust.material.opacity = 0.55 * (1 - this.fade);
       this.reflectOpacity.value = 0.16 * Math.max(0, Math.min(1, (s - 0.45) / 0.25)) * (1 - this.fade);

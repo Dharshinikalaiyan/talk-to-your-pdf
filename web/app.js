@@ -766,6 +766,7 @@ async function send(message, via, audio, { echo = true } = {}) {
   if (!audio && !message.trim()) return;
   hideError();
   setBusy(true);
+  scene?.flash();   // the logo lights up once for each new question
   const userMsg = audio ? addUserMessage("…", via) : echo ? addUserMessage(message.trim(), via) : null;
   const typing = addTyping();
   try {
@@ -968,7 +969,8 @@ function startDictation() {
     let interim = "";
     for (const r of e.results) (r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript));
     $("question").value = finalText || interim;   // show the words as they're heard
-    scene?.beat(0.7);
+    talking = true;
+    scene?.beat(1);
   };
   rec.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") showError("Microphone access is blocked. Allow the microphone for this page in your browser settings, or type instead.");
@@ -982,9 +984,23 @@ function startDictation() {
     $("question").value = "";
     if (text) send(text, "voice");
   };
+  // The browser's recogniser doesn't share the mic's loudness, so the logo beats in a
+  // calm rhythm while it listens and faster, speech-like, while it hears you talk.
+  let talking = false, beatTimer = null;
+  const pulse = () => {
+    if (state.recording?.dictation !== rec) return;
+    scene?.beat(talking ? 0.55 + Math.random() * 0.4 : 0.35);
+    sceneLevel(talking ? 0.3 + Math.random() * 0.4 : 0.1);
+    beatTimer = setTimeout(pulse, talking ? 150 + Math.random() * 180 : 520);
+  };
+  rec.onspeechstart = () => { talking = true; };
+  rec.onspeechend = () => { talking = false; };
+  const end = rec.onend;
+  rec.onend = () => { clearTimeout(beatTimer); sceneLevel(0); end(); };
   state.recording = { dictation: rec };
   ambient?.duck(2);
   setMic("listening");
+  pulse();
   hideError();
   rec.start();
 }
