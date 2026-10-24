@@ -26,6 +26,10 @@ const ambient = window.Ambient ? new Ambient() : null;
 // the logo beats softly with the music's bells and pulse, but only while it is resting
 if (ambient) ambient.onBeat = (k) => { if (scene && scene.mode === "idle") scene.beat(k); };
 
+// music pauses while the visitor is on another tab, and comes back when they return
+document.addEventListener("visibilitychange", () => ambient?.setAway(document.hidden));
+if (ambient) ambient.away = document.hidden;
+
 function soundPref() {
   try { return localStorage.getItem("pdfa-sound") !== "0"; } catch { return true; }  // on by default
 }
@@ -275,16 +279,29 @@ function renderLibrary() {
   }
 }
 
+// "My PDFs" pops out of its button like the settings bubble.
 function openLibrary() {
+  closeHistory();
   renderLibrary();
-  $("library").hidden = false;
-  slideIn($("library"));
+  const lib = $("library"), btn = $("library-btn");
+  lib.hidden = false;
+  // grow from the button: point the animation's origin at it
+  const b = btn.getBoundingClientRect(), l = lib.getBoundingClientRect();
+  if (!btn.hidden && b.width) lib.style.transformOrigin = `${Math.round(b.left + b.width / 2 - l.left)}px -10px`;
+  lib.classList.remove("closing");
+  lib.classList.add("open", "popping");
+  btn.setAttribute("aria-expanded", "true");
+  ambient?.bubble();
   ($("library-search-wrap").hidden ? $("library-list").querySelector("button") : $("library-search"))?.focus();
 }
 
 function closeLibrary() {
-  $("library").classList.remove("open");
-  setTimeout(() => { if (!$("library").classList.contains("open")) $("library").hidden = true; }, reduced() ? 0 : 400);
+  const lib = $("library");
+  if (lib.hidden) return;
+  lib.classList.remove("open", "popping");
+  lib.classList.add("closing");
+  $("library-btn").setAttribute("aria-expanded", "false");
+  setTimeout(() => { if (lib.classList.contains("closing")) { lib.hidden = true; lib.classList.remove("closing"); } }, reduced() ? 0 : 300);
 }
 
 // A small line in the conversation, e.g. "Now talking about: Lease agreement".
@@ -1099,7 +1116,11 @@ document.addEventListener("keydown", (e) => {
   else if (!$("library").hidden) closeLibrary();
   else if (!$("preview").hidden && !wide()) closePreview();
 });
-$("library-btn").addEventListener("click", () => { closeHistory(); openLibrary(); });
+$("library-btn").addEventListener("click", () => ($("library").hidden || $("library").classList.contains("closing") ? openLibrary() : closeLibrary()));
+// a click outside the bubble closes it, like Settings
+document.addEventListener("pointerdown", (e) => {
+  if (!$("library").hidden && !$("library").contains(e.target) && !$("library-btn").contains(e.target) && !e.target.closest("[data-library], #switch-doc")) closeLibrary();
+});
 $("history-btn").addEventListener("click", () => ($("history").hidden ? openHistory() : closeHistory()));
 // a click anywhere outside the sidebar closes it
 document.addEventListener("pointerdown", (e) => {

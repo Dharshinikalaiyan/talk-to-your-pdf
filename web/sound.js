@@ -7,6 +7,7 @@
 //
 // Browsers only allow audio after a click or key press, so nothing plays until then.
 // While the microphone listens the music is silenced; while an answer is read aloud it ducks.
+// When the visitor switches to another tab it fades out and pauses, and resumes on return.
 
 (function () {
   const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
@@ -68,9 +69,31 @@
       return buf;
     }
 
+    /** The visitor left the tab (true) or came back (false): fade out and pause, or resume. */
+    async setAway(away) {
+      this.away = away;
+      if (!this.enabled) return;
+      if (!this.ctx) return away ? undefined : this.setEnabled(true);   // switched on while away
+      if (away) {
+        this._fade(this.master.gain, 0, 0.4);
+        this._stopMusic();
+        setTimeout(() => { if (this.away) this.ctx.suspend(); }, 450);
+      } else {
+        if (this.ctx.state === "suspended") await this.ctx.resume();
+        this._fade(this.master.gain, 1, 1.2);
+        if (!this._running) this._startMusic();
+      }
+    }
+
+    _stopMusic() {
+      clearTimeout(this._chordTimer); clearTimeout(this._bellTimer); clearTimeout(this._pulseTimer);
+      this._running = false;
+    }
+
     /** Turn music + sounds on or off. Must first be called from a click/keypress. */
     async setEnabled(on) {
       this.enabled = on;
+      if (on && this.away) return;   // starts when the visitor comes back to the tab
       if (on) {
         if (!this._ensure()) return;
         if (this.ctx.state === "suspended") await this.ctx.resume();
@@ -79,8 +102,7 @@
         if (!this._running) this._startMusic();
       } else if (this.ctx) {
         this._fade(this.master.gain, 0, 0.8);
-        clearTimeout(this._chordTimer); clearTimeout(this._bellTimer); clearTimeout(this._pulseTimer);
-        this._running = false;
+        this._stopMusic();
       }
     }
 

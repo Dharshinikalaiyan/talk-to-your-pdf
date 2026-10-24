@@ -488,3 +488,25 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 /* moving between centre and right: fade + slide in from the side it came from */
 .chat.arrive { animation: chat-arrive .75s var(--ease) both; }
 @keyframes chat-arrive { from { opacity: 0; transform: translateX(var(--from, 40px)) scale(.985); } }
+
+/* "My PDFs": the same glass bubble as Settings, popping out of its button */
+.library:not(.sidebar) { color: #fff; transform: none; opacity: 1; transition: none;
+  background: linear-gradient(180deg, rgb(196 160 255 / .62), rgb(150 100 240 / .55)); border: 1px solid rgb(255 255 255 / .55);
+  box-shadow: 0 24px 60px -18px rgb(50 10 120 / .6), inset 0 1px 0 rgb(255 255 255 / .7), inset 0 -18px 30px rgb(120 60 230 / .25);
+  backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4); }
+.library:not(.sidebar).popping { animation: bubble-pop .55s var(--ease) both; }
+.library:not(.sidebar).closing { animation: bubble-pop .3s ease-in reverse both; }
+.library:not(.sidebar) .library-head h2, .library:not(.sidebar) .library-head h2 em { color: #fff; }
+.library:not(.sidebar) .icon-pill { color: #fff; background: rgb(255 255 255 / .18); }
+.library:not(.sidebar) .library-search input { background: rgb(255 255 255 / .2); border-color: rgb(255 255 255 / .45); color: #fff; }
+.library:not(.sidebar) .library-search input::placeholder { color: rgb(255 255 255 / .75); }
+.library:not(.sidebar) .library-search input:focus { outline-color: #fff; }
+.library:not(.sidebar) .library-open { color: #fff; }
+.library:not(.sidebar) .library-open > svg { background: rgb(255 255 255 / .2); color: #fff; }
+.library:not(.sidebar) .li-meta { color: rgb(255 255 255 / .78); }
+.library:not(.sidebar) .library-item:hover { background: rgb(255 255 255 / .14); }
+.library:not(.sidebar) .library-item.current { background: rgb(255 255 255 / .22); }
+.library:not(.sidebar) .library-delete { color: rgb(255 255 255 / .8); }
+.library:not(.sidebar) .library-delete:hover { background: rgb(255 255 255 / .9); color: #B4123B; }
+.library:not(.sidebar) .library-empty { color: rgb(255 255 255 / .85); }
+@media (prefers-reduced-motion: reduce) { .library:not(.sidebar).popping, .library:not(.sidebar).closing { animation: none; } }
