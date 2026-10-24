@@ -194,7 +194,7 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .entry:not([hidden]) ~ .chat { visibility: hidden; }
 
 /* the empty space the 3D logo shows through: tall at first, small once you're talking */
-.logo-slot { flex: none; height: 84px; }
+.logo-slot { flex: none; height: 0; }   /* once talking, the logo is a watermark inside the card */
 .chat.fresh .logo-slot { height: clamp(170px, 34vh, 340px); }
 
 /* a soft frosted sheet keeps text readable over the sky */
@@ -338,7 +338,6 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
   .icon-pill { width: 40px; min-height: 40px; }
   .glass-pill { min-height: 54px; padding: 0 30px; font-size: 18px; }
   .chat { top: 118px; }
-  .logo-slot { height: 64px; }
   .chat.fresh .logo-slot { height: clamp(120px, 24vh, 200px); }
   .panel-scroll { padding: 18px 16px 10px; }
   .doc-bar .lbl { display: none; }
@@ -510,3 +509,14 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .library:not(.sidebar) .library-delete:hover { background: rgb(255 255 255 / .9); color: #B4123B; }
 .library:not(.sidebar) .library-empty { color: rgb(255 255 255 / .85); }
 @media (prefers-reduced-motion: reduce) { .library:not(.sidebar).popping, .library:not(.sidebar).closing { animation: none; } }
+
+/* ripples that follow the cursor */
+.ripples { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+/* the logo as a faint watermark over the middle of the chat card */
+.logo-watermark #scene { z-index: 11; }
+/* the logo mark in the corner, next to the name */
+.wordmark { display: inline-flex; align-items: center; gap: 10px; }
+.wordmark .mark { width: 30px; height: 40px; fill: none; stroke: url(#mark-g); stroke-width: 34; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 2px 8px rgb(150 60 230 / .55)); transition: transform .5s var(--ease); }
+#home-link:hover .mark { transform: rotate(-8deg) scale(1.06); }
+.entry .wordmark .mark { display: none; }

@@ -292,6 +292,8 @@
     setMode(mode) { this.mode = ["idle", "listening", "thinking", "speaking"].includes(mode) ? mode : "idle"; if (this.ok && reduceMotion()) this._draw(0, true); }
     burst() { this.burstT = this.t; }
     setPaused(on) { this.paused = on; }
+    /** 0 = the full logo; 1 = a faint watermark (drawn over the chat card, so kept very light). */
+    setFade(f) { this.fadeTarget = f; document.documentElement.classList.toggle("logo-watermark", f > 0.5); if (this.ok && reduceMotion()) this._draw(0, true); }
     beat(strength = 0.7) { this.pulse = Math.max(this.pulse, Math.min(1, strength)); }
 
     _draw(dt, still = false) {
@@ -319,7 +321,10 @@
       this.reflection.position.set(x, 2 * waterY - y, 0);
       this.reflection.scale.set(s, -s, s);
       // the reflection belongs to the big logo above the lake; it fades as the logo shrinks
-      this.reflectOpacity.value = 0.16 * Math.max(0, Math.min(1, (s - 0.45) / 0.25));
+      this.fade = (this.fade || 0) + ((this.fadeTarget || 0) - (this.fade || 0)) * (still ? 1 : 0.06);
+      u.uOpacity.value = 0.95 * (1 - 0.86 * this.fade);
+      this.dust.material.opacity = 0.55 * (1 - this.fade);
+      this.reflectOpacity.value = 0.16 * Math.max(0, Math.min(1, (s - 0.45) / 0.25)) * (1 - this.fade);
       this.reflection.visible = this.reflectOpacity.value > 0.005;
 
       // splash: where is the cursor in the letter's own coordinates, and how fast is it moving?

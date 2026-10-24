@@ -40,17 +40,13 @@
 
 
   <!-- The dream scene: CSS sky, horizon and lake, with the WebGL particle document on top -->
-  <!-- water: a gentle ripple for the pond's reflection, and a wave that follows the cursor -->
+  <!-- water: a gentle ripple for the pond's reflection -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <filter id="water" x="0" y="0" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency="0.004 0.09" numOctaves="1" seed="2">
         <animate attributeName="baseFrequency" dur="14s" values="0.004 0.09;0.005 0.11;0.004 0.09" repeatCount="indefinite"/>
       </feTurbulence>
       <feDisplacementMap in="SourceGraphic" scale="9" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <filter id="wavy" x="-5%" y="-5%" width="110%" height="110%">
-      <feTurbulence id="wavy-noise" type="fractalNoise" baseFrequency="0.008 0.025" numOctaves="2" seed="3"/>
-      <feDisplacementMap id="wavy-map" in="SourceGraphic" scale="0" xChannelSelector="R" yChannelSelector="G"/>
     </filter>
   </svg>
 
@@ -76,7 +72,7 @@
   </div>
 
   <header class="top">
-    <a class="wordmark" id="home-link" href="/" title="Back to the start">talk to your <em>pdf</em></a>
+    <a class="wordmark" id="home-link" href="/" title="Back to the start"><svg class="mark" viewBox="96 0 260 380" aria-hidden="true"><defs><linearGradient id="mark-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE6FC"/><stop offset="1" stop-color="#D9A6FF"/></linearGradient></defs><path d="M140 78C132 30 214 14 206 84C200 170 178 250 142 300C110 342 150 368 214 352C282 336 326 300 322 268C318 238 288 232 270 226C232 214 232 176 270 168C302 160 322 140 314 112"/></svg>talk to your <em>pdf</em></a>
     <nav class="top-nav" aria-label="Quick links">
       <button type="button" data-ask="How does this work?">How it works</button>
       <button type="button" data-ask="Is my data private?">Privacy</button>
@@ -208,6 +204,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="pond.js"></script>
   <script src="scene3d.js"></script>
+  <script src="ripples.js"></script>
   <script src="sound.js"></script>
   <script src="app.js"></script>
 </body>

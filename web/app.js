@@ -53,21 +53,30 @@ const sceneLevel = (v) => scene?.setLevel(v);
 const wide = () => innerWidth >= 900;
 const withPdf = () => document.body.classList.contains("with-pdf");
 
-// The logo sits in the empty slot at the top of the conversation: big while the
-// conversation is fresh, small once it has started.
+// The logo floats in the empty slot above the conversation while it's fresh; once you're
+// talking it moves into the middle of the card, faded like a watermark.
 function placeScene() {
   if (!scene) return;
   const chat = $("workspace"), slot = $("logo-slot");
   const fresh = chat.classList.contains("fresh");
   const clamp = (lo, v, hi) => Math.max(lo, Math.min(hi, v));
   const phone = innerWidth <= 560;
-  const slotH = fresh ? (phone ? clamp(120, innerHeight * 0.24, 200) : clamp(170, innerHeight * 0.34, 340)) : phone ? 64 : 84;
   const top = chat.getBoundingClientRect().top + slot.offsetTop;
   // where the column will END UP (it may be mid-slide): centred, or on the right.
   // Same sizes as .chat / --chat-w / --gutter in style.css.
   const gutter = clamp(16, innerWidth * 0.026, 36);
   const cx = withPdf() && wide() ? innerWidth - gutter - clamp(440, innerWidth * 0.42, 640) / 2 : innerWidth / 2;
-  scene.place(cx / innerWidth, (top + slotH / 2) / innerHeight, (1.25 * slotH) / innerHeight);
+  if (fresh) {
+    // above the card, big
+    const slotH = phone ? clamp(120, innerHeight * 0.24, 200) : clamp(170, innerHeight * 0.34, 340);
+    scene.setFade(0);
+    scene.place(cx / innerWidth, (top + slotH / 2) / innerHeight, (1.25 * slotH) / innerHeight);
+  } else {
+    // once you're talking: in the middle of the card, faded like a watermark
+    const card = chat.getBoundingClientRect();
+    scene.setFade(1);
+    scene.place(cx / innerWidth, (card.top + card.height / 2) / innerHeight, (0.75 * card.height) / innerHeight);
+  }
 }
 addEventListener("resize", () => { placeScene(); setPlaceholder(); });
 
@@ -1181,35 +1190,6 @@ $("question").addEventListener("input", (e) => {
   e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
 });
 $("mic").addEventListener("click", () => (state.recording ? stopRecording() : startRecording()));
-
-// ---------------------------------------------------------------- the cursor wave
-// Moving the mouse sends a ripple through the scenery and the heading, like wind over
-// water: an SVG displacement filter whose strength follows the cursor's speed, then
-// settles. The filter is switched off entirely while the mouse is still (it's costly).
-(function cursorWave() {
-  const map = $("wavy-map"), noise = $("wavy-noise");
-  const targets = [document.querySelector(".sky"), $("intro-title")];
-  let px = 0, py = 0, energy = 0, seed = 0, on = false, raf = 0;
-  const tick = () => {
-    raf = 0;
-    energy *= 0.92;
-    if (energy < 0.4) {
-      if (on) { targets.forEach((t) => (t.style.filter = "")); map.setAttribute("scale", "0"); on = false; }
-      return;
-    }
-    if (!on) { targets.forEach((t) => (t.style.filter = "url(#wavy)")); on = true; }
-    map.setAttribute("scale", Math.min(26, energy).toFixed(1));
-    noise.setAttribute("seed", String((seed = (seed + 1) % 997)));   // keep the water moving
-    raf = requestAnimationFrame(tick);
-  };
-  addEventListener("pointermove", (e) => {
-    if (e.pointerType !== "mouse" || reduced() || document.body.classList.contains("calm")) return;
-    const speed = Math.hypot(e.clientX - px, e.clientY - py);
-    px = e.clientX; py = e.clientY;
-    energy = Math.min(30, energy + speed * 0.25);
-    if (!raf) raf = requestAnimationFrame(tick);
-  }, { passive: true });
-})();
 
 // header links: quick questions for the assistant
 document.querySelector(".top-nav").addEventListener("click", (e) => {

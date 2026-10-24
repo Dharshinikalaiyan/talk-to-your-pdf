@@ -28,7 +28,7 @@ def build() -> Path:
     if OUT.exists():
         shutil.rmtree(OUT)
     (OUT / "local").mkdir(parents=True)
-    for name in ["style.css", "app.js", "pond.js", "scene3d.js", "sound.js"]:
+    for name in ["style.css", "app.js", "pond.js", "scene3d.js", "ripples.js", "sound.js"]:
         shutil.copy(WEB / name, OUT / name)
     for name in ["engine.js", "backend.js"]:
         shutil.copy(WEB / "local" / name, OUT / "local" / name)
