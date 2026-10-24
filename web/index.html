@@ -6,8 +6,8 @@
   <title>Talk to your PDF</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237A3CE6'/%3E%3Ctext x='32' y='43' font-family='Georgia,serif' font-style='italic' font-size='32' text-anchor='middle' fill='%23FFE4FC'%3EL%E2%80%99s%3C/text%3E%3C/svg%3E">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' rx='100' fill='%237A3CE6'/%3E%3Cpath d='M140 78C132 30 214 14 206 84C200 170 178 250 142 300C110 342 150 368 214 352C282 336 326 300 322 268C318 238 288 232 270 226C232 214 232 176 270 168C302 160 322 140 314 112' fill='none' stroke='%23FFE4FC' stroke-width='30' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -30,6 +30,8 @@
     <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/></symbol>
     <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9zM9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4"/></symbol>
     <symbol id="i-return" viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="m9 10-5 5 5 5"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4-4 10-10 8 8-6 6Z"/><path d="M22 21H7"/><path d="m5 11 8 8"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-swap" viewBox="0 0 24 24"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></symbol>
     <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/></symbol>
@@ -69,6 +71,8 @@
     <a class="wordmark" id="home-link" href="/" title="Back to the start">talk to your <em>pdf</em></a>
     <div class="top-right">
       <button class="pill" id="library-btn" type="button" aria-haspopup="dialog" aria-controls="library" hidden><svg aria-hidden="true"><use href="#i-library"/></svg><span class="lbl">My PDFs</span><span class="count" id="library-count"></span></button>
+      <button class="pill" id="new-chat" type="button" title="Start a new chat (this one is saved)"><svg aria-hidden="true"><use href="#i-plus"/></svg><span class="lbl">New chat</span></button>
+      <button class="pill" id="history-btn" type="button" aria-haspopup="dialog" aria-controls="history"><svg aria-hidden="true"><use href="#i-history"/></svg><span class="lbl">Chats</span></button>
       <button class="pill" id="new-upload" type="button"><svg aria-hidden="true"><use href="#i-upload"/></svg><span class="lbl">Upload</span></button>
       <button class="icon-pill sound-btn" id="sound-btn" type="button" aria-pressed="false" aria-label="Turn music and sounds on"><span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></button>
       <div class="settings" id="settings">
@@ -151,6 +155,21 @@
     </label>
     <ul class="library-list" id="library-list"></ul>
     <button class="glass-pill small" id="library-upload" type="button"><svg aria-hidden="true"><use href="#i-upload"/></svg>Add PDFs</button>
+  </aside>
+
+  <!-- Saved chats: a sidebar on the left, like ChatGPT -->
+  <aside class="library sidebar" id="history" role="dialog" aria-labelledby="history-title" hidden>
+    <div class="library-head">
+      <h2 id="history-title"><em>Your</em> chats</h2>
+      <button class="icon-pill" id="close-history" type="button" aria-label="Close chats"><svg aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <button class="pick add wide" id="sidebar-new-chat" type="button"><svg aria-hidden="true"><use href="#i-plus"/></svg>New chat</button>
+    <label class="library-search">
+      <span class="visually-hidden">Search your chats</span>
+      <input id="history-search" type="search" placeholder="Search your chats…" autocomplete="off">
+    </label>
+    <ul class="library-list" id="history-list"></ul>
+    <button class="mini-btn danger" id="clear-history" type="button"><svg aria-hidden="true"><use href="#i-trash"/></svg>Delete all chats</button>
   </aside>
 
   <!-- The PDF: on the left once one is chosen (phones: slides in on demand) -->

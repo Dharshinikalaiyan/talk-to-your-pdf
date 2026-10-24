@@ -37,3 +37,4 @@ class Answer(BaseModel):
     open_doc: DocumentInfo | None = None # the conversation moved to this PDF (the UI opens it)
     choices: list[DocumentInfo] = []     # PDFs to pick from
     pending: str = ""                    # question to answer once a PDF is picked
+    conv_id: str = ""                    # the saved chat this exchange was stored in

@@ -6,3 +6,6 @@ __pycache__/
 .env
 models/
 .impeccable/hook.cache.json
+test_pdfs/
+data/conversations.db
+.DS_Store

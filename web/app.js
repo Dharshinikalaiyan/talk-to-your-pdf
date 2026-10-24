@@ -292,6 +292,7 @@ function addDivider(text) {
 // Choose a PDF: the conversation slides right and the PDF opens on the left.
 function openDoc(info, { say = false } = {}) {
   if (state.doc?.doc_id === info.doc_id) return;
+  closeHistory();
   const first = !state.doc;
   state.doc = info;
   if ($("messages").children.length) addDivider(`Now talking about ${docTitle(info)}`);
@@ -446,6 +447,7 @@ function showPdf(page, visible = true) {
 // A page chip: open that answer's PDF (if another one is open now) at that page.
 function jumpToPage(page, docId) {
   const doc = docId && state.docs.find((d) => d.doc_id === docId);
+  if (docId && !doc) return toast("That PDF isn't in your library any more.", true);
   if (doc && doc.doc_id !== state.doc?.doc_id) openDoc(doc);
   showPdf(page);
 }
@@ -610,7 +612,7 @@ function answerNodes(text, docId) {
   return frag;
 }
 
-function addBotMessage(ans) {
+function addBotMessage(ans, { restoring = false } = {}) {
   const li = document.createElement("li");
   li.className = `msg bot ${ans.kind === "chat" ? "talk" : ""}`;
   const top = ans.citations[0];
@@ -661,6 +663,7 @@ function addBotMessage(ans) {
   $("messages").append(li);
   setFresh(false);
   scrollChat();
+  if (restoring) return;
   if (top) scene?.burst();
   // the PDF pane turns to the page the answer came from
   if (top && wide() && withPdf() && (!ans.doc_id || ans.doc_id === state.doc?.doc_id)) showPdf(top.page);
@@ -706,16 +709,20 @@ async function send(message, via, audio, { echo = true } = {}) {
   const userMsg = audio ? addUserMessage("…", via) : echo ? addUserMessage(message.trim(), via) : null;
   const typing = addTyping();
   try {
-    const docQuery = state.doc ? `?doc_id=${encodeURIComponent(state.doc.doc_id)}` : "";
+    const params = new URLSearchParams();
+    if (state.doc) params.set("doc_id", state.doc.doc_id);
+    if (state.conv) params.set("conv_id", state.conv);
+    const docQuery = params.toString() ? `?${params}` : "";
     const ans = audio
       ? await api(`/api/chat/voice${docQuery}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: audio.buffer })
-      : await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: message.trim(), doc_id: state.doc?.doc_id ?? null }) });
+      : await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: message.trim(), doc_id: state.doc?.doc_id ?? null, conv_id: state.conv }) });
     if (audio) {
       userMsg.textContent = ans.question;
       userMsg.dataset.text = ans.question;
       userMsg.insertAdjacentHTML("afterbegin", `<span class="via">${icon("mic")}</span>`);
     }
     typing.remove();
+    if (ans.conv_id) setConv(ans.conv_id);   // saved: the first message starts a new saved chat
     if (ans.open_doc) openDoc(state.docs.find((d) => d.doc_id === ans.open_doc.doc_id) || ans.open_doc);
     addBotMessage(ans);
     renderSuggestions();
@@ -726,6 +733,108 @@ async function send(message, via, audio, { echo = true } = {}) {
   } finally {
     setBusy(false);
   }
+}
+
+// ---------------------------------------------------------------- saved chats (sidebar)
+// Like ChatGPT: "+ New chat" starts fresh, and every earlier chat is saved on the server
+// (private to you) and listed in the sidebar. A reload brings back the chat you were in.
+
+function setConv(id) {
+  state.conv = id || null;
+  try { id ? localStorage.setItem("pdfa-conv", id) : localStorage.removeItem("pdfa-conv"); } catch {}
+}
+
+function showMessages(rows) {
+  $("messages").innerHTML = "";
+  for (const row of rows) {
+    addUserMessage(row.message, row.via);
+    addBotMessage(row.reply, { restoring: true });
+  }
+  setFresh(!rows.length);
+  renderSuggestions();
+  scrollChat();
+}
+
+// After a reload: reopen the chat you were in, if it still exists.
+async function restoreChat() {
+  let last = null;
+  try { last = localStorage.getItem("pdfa-conv"); } catch {}
+  if (!last) return;
+  try { showMessages(await api(`/api/conversations/${encodeURIComponent(last)}`)); setConv(last); }
+  catch { setConv(null); }
+}
+
+// "+ New chat": the current chat is already saved; start an empty one in the centre.
+function newChat() {
+  if (state.busy) return;
+  closeHistory();
+  if (state.doc) closeDoc();
+  setConv(null);
+  showMessages([]);
+  hideError();
+  ambient?.whoosh(false);
+  $("question").focus();
+}
+
+async function openConversation(id) {
+  if (state.busy) return;
+  let rows;
+  try { rows = await api(`/api/conversations/${encodeURIComponent(id)}`); } catch (e) { return toast(e.message, true); }
+  closeHistory();
+  if (state.doc) closeDoc();
+  setConv(id);
+  showMessages(rows);
+}
+
+function renderHistory() {
+  const query = $("history-search").value.trim().toLowerCase();
+  const list = $("history-list");
+  list.innerHTML = "";
+  const items = (state.convs || []).filter((c) => c.title.toLowerCase().includes(query));
+  if (!items.length) list.innerHTML = `<li class="library-empty">${state.convs?.length ? "No chat matches that." : "No saved chats yet. Ask something and it's saved here."}</li>`;
+  for (const c of items) {
+    const li = document.createElement("li");
+    li.className = "library-item" + (c.id === state.conv ? " current" : "");
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "library-open";
+    open.dataset.conv = c.id;
+    const when = new Date(c.updated_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    open.innerHTML = `${icon("history")}<span class="li-text"><span class="li-name"></span><span class="li-meta"></span></span>`;
+    open.querySelector(".li-name").textContent = c.title;
+    open.querySelector(".li-meta").textContent = `${when} · ${c.messages} message${c.messages === 1 ? "" : "s"}${c.id === state.conv ? " · open now" : ""}`;
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "library-delete";
+    del.dataset.delConv = c.id;
+    del.setAttribute("aria-label", `Delete chat: ${c.title}`);
+    del.innerHTML = icon("trash");
+    li.append(open, del);
+    list.append(li);
+  }
+}
+
+async function openHistory() {
+  closeLibrary();
+  try { state.convs = await api("/api/conversations"); } catch { state.convs = []; }
+  renderHistory();
+  $("history").hidden = false;
+  requestAnimationFrame(() => $("history").classList.add("open"));
+  $("history-search").focus();
+}
+
+function closeHistory() {
+  $("history").classList.remove("open");
+  setTimeout(() => { if (!$("history").classList.contains("open")) $("history").hidden = true; }, reduced() ? 0 : 400);
+}
+
+async function deleteConversation(id) {
+  const c = state.convs?.find((x) => x.id === id);
+  if (!c || !confirm(`Delete the chat "${c.title}"?`)) return;
+  try { await api(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch (e) { return toast(e.message, true); }
+  state.convs = state.convs.filter((x) => x.id !== id);
+  if (state.conv === id) { setConv(null); showMessages([]); }
+  renderHistory();
 }
 
 async function addSample() {
@@ -925,10 +1034,30 @@ $("view-pdf").addEventListener("click", () => showPdf(1));
 $("close-preview").addEventListener("click", () => (wide() ? closeDoc() : closePreview()));
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (!$("library").hidden) closeLibrary();
+  if (!$("history").hidden) closeHistory();
+  else if (!$("library").hidden) closeLibrary();
   else if (!$("preview").hidden && !wide()) closePreview();
 });
-$("library-btn").addEventListener("click", openLibrary);
+$("library-btn").addEventListener("click", () => { closeHistory(); openLibrary(); });
+$("history-btn").addEventListener("click", () => ($("history").hidden ? openHistory() : closeHistory()));
+$("new-chat").addEventListener("click", newChat);
+$("sidebar-new-chat").addEventListener("click", newChat);
+$("close-history").addEventListener("click", closeHistory);
+$("history-search").addEventListener("input", renderHistory);
+$("history-list").addEventListener("click", (e) => {
+  const del = e.target.closest("[data-del-conv]");
+  if (del) return deleteConversation(del.dataset.delConv);
+  const open = e.target.closest("[data-conv]");
+  if (open) openConversation(open.dataset.conv);
+});
+$("clear-history").addEventListener("click", async () => {
+  if (!confirm("Delete all your saved chats? This can't be undone.")) return;
+  try { await api("/api/conversations", { method: "DELETE" }); } catch (e) { return toast(e.message, true); }
+  state.convs = [];
+  setConv(null);
+  showMessages([]);
+  renderHistory();
+});
 $("close-library").addEventListener("click", closeLibrary);
 $("library-upload").addEventListener("click", () => $("file-input").click());
 $("library-search").addEventListener("input", renderLibrary);
@@ -1040,6 +1169,7 @@ setupEntry();
   await refreshDocs();
   renderLibrary();
   updateIntro();
+  await restoreChat();
   renderSuggestions();
   setPlaceholder();
   placeScene();

@@ -18,7 +18,7 @@ Upload a PDF and ask questions about it by typing or speaking. Answers come only
 ```bash
 cd project2-pdf-assistant   # this folder
 ../.venv/bin/uvicorn api:app --port 8766   # then open http://127.0.0.1:8766
-../.venv/bin/pytest -q                     # 59 tests
+../.venv/bin/pytest -q                     # 60 tests
 ../.venv/bin/python make_sample_pdf.py     # rebuild the sample manual
 ```
 
@@ -99,6 +99,7 @@ question → library.search: embeddings pick 8 candidates → re-ranker keeps th
 | `pdf_assistant/library.py` | One vector index per document, **two-stage retrieval** (embeddings → re-ranker), de-duplicating uploads by content hash |
 | `pdf_assistant/reader.py` | **Re-ranker** (cross-encoder) and **extractive QA reader**: free local models that find the exact answer phrase |
 | `pdf_assistant/conversation.py` | A rule-based NLP router in front of RAG: greetings and small talk ("hi, what's up?"), a how-to-use guide, picking a PDF by name ("open the lease", "warranty in the helios manual?"), or "which PDF?" with the question remembered. No AI model needed |
+| `pdf_assistant/history.py` | Saved chats like ChatGPT ("+ New chat", a sidebar of earlier chats), private per user, stored without document text |
 | `pdf_assistant/answering.py` | Engine chain Claude → Groq → local, grounded prompting with page citations, graceful fallback |
 | `pdf_assistant/voice.py` | Speech-to-text, and making text sound natural when spoken |
 | `api.py` | Upload, ask, voice and file-preview endpoints |

@@ -208,6 +208,9 @@ def _isolate_api(api, tmp_path, monkeypatch):
 
     monkeypatch.setattr(api, "library", Library(tmp_path / "uploads"))
     monkeypatch.setattr(api, "audit", AuditLog(tmp_path / "audit.db"))
+    from pdf_assistant.history import ChatHistory
+
+    monkeypatch.setattr(api, "history", ChatHistory(tmp_path / "conversations.db"))
 
 
 @pytest.fixture
@@ -485,3 +488,26 @@ def test_old_uploads_expire(sample_pdf, tmp_path):
     assert lib.expire(datetime.now(timezone.utc) - timedelta(hours=24)) == []  # still fresh
     assert lib.expire(datetime.now(timezone.utc) + timedelta(seconds=1)) == [(ALICE, info.doc_id)]
     assert lib.list(ALICE) == [] and not any(tmp_path.iterdir())
+
+
+def test_saved_chats_work_like_a_sidebar(two_users):
+    _, alice, bob, _ = two_users
+    first = alice.post("/api/chat", json={"message": "hi"}).json()["conv_id"]
+    same = alice.post("/api/chat", json={"message": "How long is the warranty?", "conv_id": first}).json()
+    assert same["conv_id"] == first                                   # same chat
+    second = alice.post("/api/chat", json={"message": "What does error E07 mean?"}).json()["conv_id"]
+    assert second != first                                            # "+ New chat"
+    chats = alice.get("/api/conversations").json()
+    assert [c["title"] for c in chats] == ["What does error E07 mean?", "hi"] and chats[1]["messages"] == 2
+    msgs = alice.get(f"/api/conversations/{first}").json()
+    assert [m["message"] for m in msgs] == ["hi", "How long is the warranty?"]
+    assert msgs[1]["reply"]["citations"][0]["snippet"] == ""         # no document text kept
+    # private: Bob can't list, read, add to or delete Alice's chats
+    assert bob.get("/api/conversations").json() == []
+    assert bob.get(f"/api/conversations/{first}").status_code == 404
+    assert bob.post("/api/chat", json={"message": "hi", "conv_id": first}).json()["conv_id"] != first
+    assert bob.delete(f"/api/conversations/{first}").status_code == 404
+    alice.delete(f"/api/conversations/{first}")
+    assert [c["id"] for c in alice.get("/api/conversations").json()] == [second]
+    alice.delete("/api/conversations")
+    assert alice.get("/api/conversations").json() == []

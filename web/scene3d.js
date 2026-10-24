@@ -1,4 +1,4 @@
-// The dream scene: the logo, a glittering 3D "L's" ("Let's") made of particles, floating above a lake.
+// The dream scene: the logo, a glittering 3D ribbon "L's" ("Let's") made of particles, floating above a lake.
 //
 // ~16,000 points live in a GPU shader. Each point knows two positions: one inside the
 // letter (sampled from the real Instrument Serif italic "p", given depth) and one on a sphere.
@@ -14,25 +14,80 @@
 
 (function () {
   const COUNT = 16000;
-  const GLYPH = "L\u2019s";   // "L's", short for "Let's"
-  const GLYPH_FONT = "italic 400 300px 'Instrument Serif'";
+  // The logo: an original ribbon monogram, an "L" whose foot sweeps up into an "s" ("Let's"),
+  // drawn like a calligraphy pen stroke (thick on the down-strokes, thin on the cross-strokes).
+  // If web/logo.png exists, that image is used instead (anything brighter than its corner
+  // colour becomes glitter).
+  const LOGO_IMAGE = "/static/logo.png";
+  const RIBBON = [
+    [[140, 78], [132, 30], [214, 14], [206, 84]],      // the curl at the top of the L
+    [[206, 84], [200, 170], [178, 250], [142, 300]],   // the stem
+    [[142, 300], [110, 342], [150, 368], [214, 352]],  // the foot
+    [[214, 352], [282, 336], [326, 300], [322, 268]],  // sweeping up into the s
+    [[322, 268], [318, 238], [288, 232], [270, 226]],
+    [[270, 226], [232, 214], [232, 176], [270, 168]],
+    [[270, 168], [302, 160], [322, 140], [314, 112]],  // the flick at the end
+  ];
+
+  function drawRibbon(g, { pen = -0.6, wMax = 46, wMin = 8 } = {}) {
+    const pts = [];
+    for (const [a, b, c, d] of RIBBON) {
+      for (let i = pts.length ? 1 : 0; i <= 80; i++) {
+        const t = i / 80, u = 1 - t;
+        pts.push([u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0],
+                  u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]]);
+      }
+    }
+    g.strokeStyle = "#fff";
+    g.lineCap = "round";
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+      if (x0 === x1 && y0 === y1) continue;
+      const taper = Math.min(1, i / 30, (pts.length - i) / 30);   // pointed ends
+      g.lineWidth = (wMin + (wMax - wMin) * Math.abs(Math.sin(Math.atan2(y1 - y0, x1 - x0) - pen))) * taper + 1;
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    }
+  }
+
+  async function loadLogoImage() {
+    try {
+      const res = await fetch(LOGO_IMAGE, { method: "HEAD" });
+      if (!res.ok) return null;
+      const img = new Image();
+      img.src = LOGO_IMAGE;
+      await img.decode();
+      return img;
+    } catch { return null; }
+  }
   const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // ---- shapes ---------------------------------------------------------------------
 
-  // Draw the letter on a hidden canvas, then pick random points inside it. Points on the
-  // letter's edge are flagged "bright" so the outline reads clearly.
-  function letterShape(n) {
-    const S = 360, W = 720;   // wide enough for a few letters
+  // Draw the logo on a hidden canvas, then pick random points inside it. Points on the
+  // edge are flagged "bright" so the outline reads clearly.
+  function letterShape(n, image) {
+    const S = 400, W = 400;
     const c = Object.assign(document.createElement("canvas"), { width: W, height: S });
     const g = c.getContext("2d", { willReadFrequently: true });
-    g.fillStyle = "#fff";
-    g.font = GLYPH_FONT;
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.fillText(GLYPH, W / 2, S * 0.5);
-    const img = g.getImageData(0, 0, W, S).data;
-    const inside = (x, y) => x >= 0 && y >= 0 && x < W && y < S && img[(y * W + x) * 4 + 3] > 128;
+    let inside;
+    if (image) {
+      const k = Math.min(W / image.naturalWidth, S / image.naturalHeight);
+      const w = image.naturalWidth * k, h = image.naturalHeight * k;
+      g.drawImage(image, (W - w) / 2, (S - h) / 2, w, h);
+      const img = g.getImageData(0, 0, W, S).data;
+      const at = (x, y) => (y * W + x) * 4;
+      const bg = img.slice(at(Math.round((W - w) / 2) + 1, Math.round((S - h) / 2) + 1), at(Math.round((W - w) / 2) + 1, Math.round((S - h) / 2) + 1) + 4);
+      inside = (x, y) => {
+        if (x < 0 || y < 0 || x >= W || y >= S) return false;
+        const i = at(x, y);
+        if (img[i + 3] < 128) return false;
+        return Math.abs(img[i] - bg[0]) + Math.abs(img[i + 1] - bg[1]) + Math.abs(img[i + 2] - bg[2]) > 120;
+      };
+    } else {
+      drawRibbon(g);
+      const img = g.getImageData(0, 0, W, S).data;
+      inside = (x, y) => x >= 0 && y >= 0 && x < W && y < S && img[(y * W + x) * 4 + 3] > 128;
+    }
 
     const filled = [], edges = [];
     let minX = W, maxX = 0, minY = S, maxY = 0;
@@ -44,7 +99,7 @@
         minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
       }
     }
-    if (!filled.length) return null; // font not ready
+    if (!filled.length) return null;
 
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, scale = 2.5 / (maxY - minY);
     const out = new Float32Array(n * 3), bright = new Float32Array(n);
@@ -201,8 +256,7 @@
     }
 
     async _loadLetter() {
-      try { await document.fonts.load(GLYPH_FONT, GLYPH); } catch {}
-      const shape = letterShape(COUNT);
+      const shape = letterShape(COUNT, await loadLogoImage());
       if (!shape) return;
       this.geo.attributes.position.array.set(shape.positions);
       this.geo.attributes.position.needsUpdate = true;

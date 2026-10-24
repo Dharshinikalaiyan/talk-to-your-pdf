@@ -7,3 +7,4 @@ data/uploads/
 data/audit.db
 data/session_secret
 models/
+data/conversations.db

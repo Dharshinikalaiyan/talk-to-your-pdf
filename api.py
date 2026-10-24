@@ -25,6 +25,10 @@ Endpoints (all scoped to the user in the session cookie):
   POST   /api/chat                       {"message": "...", "doc_id": optional} -> small talk, help,
                                          "which PDF?", or an answer (see pdf_assistant/conversation.py)
   POST   /api/chat/voice?doc_id=...      raw 16 kHz mono 16-bit PCM audio -> same as /api/chat
+  GET    /api/conversations              your saved chats (the sidebar), newest first
+  GET    /api/conversations/{id}         one saved chat's messages
+  DELETE /api/conversations/{id}         delete one saved chat
+  DELETE /api/conversations              delete all your saved chats
   GET    /api/activity                   your own audit history
   GET    /api/engines                    which answer engines are switched on
 
@@ -66,6 +70,7 @@ from pdf_assistant import auth
 from pdf_assistant.answering import GROQ_MODEL, generate_answer
 from pdf_assistant.audit import AuditLog
 from pdf_assistant.conversation import route
+from pdf_assistant.history import ChatHistory
 from pdf_assistant.library import Document
 from pdf_assistant.models import Answer, DocumentInfo
 from pdf_assistant.pdf_loader import PDFError
@@ -78,6 +83,7 @@ app = FastAPI(title="Interactive PDF Assistant")
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
 library = Library(DATA / "uploads")
 audit = AuditLog(DATA / "audit.db")
+history = ChatHistory(DATA / "conversations.db")
 SECRET = load_secret(DATA / "session_secret")
 signer = SessionSigner(SECRET)
 auth.register_configured()
@@ -104,8 +110,10 @@ UPLOAD_TTL_HOURS = float(os.environ.get("UPLOAD_TTL_HOURS", "0"))
 
 def _expire_uploads() -> None:
     while True:
-        for owner, doc_id in library.expire(datetime.now(timezone.utc) - timedelta(hours=UPLOAD_TTL_HOURS)):
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=UPLOAD_TTL_HOURS)
+        for owner, doc_id in library.expire(cutoff):
             audit.record(owner, "expired", doc_id, detail=f"older than {UPLOAD_TTL_HOURS:g} h")
+        history.expire(cutoff)
         time.sleep(600)
 
 
@@ -286,6 +294,8 @@ async def auth_callback(provider: str, request: Request):
         issued_at=int(time.time()),
     )
     moved = library.transfer(before.user_id, account.user_id) if before.kind == "guest" else 0
+    if before.kind == "guest":
+        history.transfer(before.user_id, account.user_id)
     audit.record(account.user_id, "sign_in", None, detail=f"{provider}; brought {moved} guest PDF(s)")
     request.state.set_identity = account
     return RedirectResponse(f"/?signin=ok&moved={moved}", status_code=303)
@@ -376,7 +386,8 @@ async def voice(doc_id: str, request: Request, user: str = Depends(current_user)
 
 class ChatRequest(BaseModel):
     message: str
-    doc_id: str | None = None   # the PDF that's open in the UI, if any
+    doc_id: str | None = None    # the PDF that's open in the UI, if any
+    conv_id: str | None = None   # the saved chat this belongs to; none = start a new one
 
 
 def _chat(user: str, message: str, doc_id: str | None, latency: dict[str, float], ip: str, action: str) -> Answer:
@@ -410,11 +421,14 @@ def chat(body: ChatRequest, request: Request, user: str = Depends(current_user))
         raise HTTPException(status_code=422, detail="Type a message first.")
     if len(message) > 500:
         raise HTTPException(status_code=422, detail="Keep messages under 500 characters.")
-    return _chat(user, message, body.doc_id, {}, _ip(request), "ask")
+    answer = _chat(user, message, body.doc_id, {}, _ip(request), "ask")
+    answer.conv_id = history.add(user, body.conv_id, message, "text", answer.model_dump(mode="json"))
+    return answer
 
 
 @app.post("/api/chat/voice", response_model=Answer)
-async def chat_voice(request: Request, doc_id: str | None = None, user: str = Depends(current_user)) -> Answer:
+async def chat_voice(request: Request, doc_id: str | None = None, conv_id: str | None = None,
+                     user: str = Depends(current_user)) -> Answer:
     if doc_id:
         _doc(user, doc_id, "voice")
     body = await request.body()
@@ -428,7 +442,38 @@ async def chat_voice(request: Request, doc_id: str | None = None, user: str = De
     latency = {"speech-to-text": time.perf_counter() - t}
     if not message:
         raise HTTPException(status_code=422, detail="No speech detected. Hold the mic a little longer and speak clearly.")
-    return _chat(user, message[:500], doc_id, latency, _ip(request), "voice")
+    answer = _chat(user, message[:500], doc_id, latency, _ip(request), "voice")
+    answer.conv_id = history.add(user, conv_id, answer.question, "voice", answer.model_dump(mode="json"))
+    return answer
+
+
+@app.get("/api/conversations")
+def conversations(user: str = Depends(current_user)) -> list[dict]:
+    return history.list(user)
+
+
+@app.get("/api/conversations/{conv_id}")
+def conversation(conv_id: str, user: str = Depends(current_user)) -> list[dict]:
+    try:
+        return history.get(user, conv_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Chat not found.")
+
+
+@app.delete("/api/conversations/{conv_id}")
+def delete_conversation(conv_id: str, user: str = Depends(current_user)) -> dict:
+    try:
+        history.delete(user, conv_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Chat not found.")
+    return {"deleted": conv_id}
+
+
+@app.delete("/api/conversations")
+def delete_conversations(user: str = Depends(current_user)) -> dict:
+    history.delete_all(user)
+    audit.record(user, "clear_history", None)
+    return {"deleted": "all"}
 
 
 @app.get("/api/activity")
