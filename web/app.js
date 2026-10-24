@@ -185,7 +185,7 @@ addEventListener("popstate", () => { if (location.hash !== "#app") showEntry(); 
 const docTitle = (d) => d.filename.replace(/\.pdf$/i, "");
 
 // Under "Let's talk.": with an empty library, Upload and the sample; once there are PDFs,
-// just a light "+ Add PDFs" (pick a PDF from "My PDFs", or simply name it in the chat).
+// a light "+ Add PDFs" (and the sample, until it's added). Pick a PDF from "My PDFs", or name it.
 function renderPicks() {
   const box = $("doc-picks");
   box.innerHTML = "";
@@ -196,10 +196,11 @@ function renderPicks() {
   up.dataset.upload = "";
   up.innerHTML = `${icon("plus")}${empty ? "Upload PDFs" : "Add PDFs"}`;
   box.append(up);
-  if (empty) {
+  // the sample stays on offer (quietly) until it's in the library
+  if (!state.docs.some((d) => /\(sample\)/i.test(d.filename))) {
     const sample = document.createElement("button");
     sample.type = "button";
-    sample.className = "pick ghost";
+    sample.className = empty ? "pick ghost" : "pick add-light";
     sample.dataset.sample = "";
     sample.innerHTML = `${icon("sparkle")}Try the sample manual`;
     box.append(sample);
