@@ -442,3 +442,8 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .library.sidebar.open { transform: none; }
 .pick.wide { justify-content: center; max-width: none; min-height: 44px; }
 @media (max-width: 560px) { .library.sidebar { top: 110px; right: var(--gutter); width: auto; } }
+
+/* browser edition: model download progress */
+.model-status { position: fixed; z-index: 65; left: 50%; top: 84px; transform: translateX(-50%); width: min(440px, calc(100vw - 32px)); padding: 10px 16px 12px; border-radius: 16px;
+  background: rgb(255 255 255 / .92); color: var(--deep); font: 600 13px var(--sans); box-shadow: 0 16px 40px -20px rgb(40 10 100 / .6); backdrop-filter: blur(14px); }
+.model-status i { display: block; height: 4px; margin-top: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--violet) calc(var(--p) * 100%), rgb(122 60 230 / .15) 0); }

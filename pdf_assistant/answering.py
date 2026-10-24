@@ -31,6 +31,7 @@ CLAUDE_MODEL = "claude-opus-5-5"
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 NOT_FOUND = "I couldn't find that in this document."
+SECOND_PASSAGE_MARGIN = 2.0   # reader score a lower-ranked passage needs to beat the top one by
 
 SYSTEM_PROMPT = f"""You answer questions about a document using ONLY the passages provided.
 Rules:
@@ -57,11 +58,16 @@ def _user_message(question: str, citations: list[Citation]) -> str:
 
 
 def local_answer(question: str, citations: list[Citation]) -> Result:
-    # 1. Ask the reader for an exact answer span in the top 2 passages; keep the most confident.
+    # 1. Ask the reader for an exact answer span in the top 2 passages. Prefer the re-ranker's
+    #    best passage; the second only wins if its answer is clearly more confident (reader
+    #    scores of two plausible spans are often within a hair of each other).
     spans = [(extract(question, c.snippet), c) for c in citations[:2]]
     spans = [(s, c) for s, c in spans if s]
     if spans:
-        span, c = max(spans, key=lambda sc: sc[0].score)
+        span, c = spans[0]
+        for other, oc in spans[1:]:
+            if other.score > span.score + SECOND_PASSAGE_MARGIN:
+                span, c = other, oc
         return Result(text=f"{span.sentence} [p. {c.page}]", engine="local", highlight=span.text)
 
     # 2. Not confident: show the 2 sentences of the best passage closest to the question.

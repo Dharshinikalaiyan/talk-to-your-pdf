@@ -18,7 +18,7 @@
   // drawn like a calligraphy pen stroke (thick on the down-strokes, thin on the cross-strokes).
   // If web/logo.png exists, that image is used instead (anything brighter than its corner
   // colour becomes glitter).
-  const LOGO_IMAGE = "/static/logo.png";
+  const LOGO_IMAGE = window.LOCAL_MODE ? "logo.png" : "/static/logo.png";
   const RIBBON = [
     [[140, 78], [132, 30], [214, 14], [206, 84]],      // the curl at the top of the L
     [[206, 84], [200, 170], [178, 250], [142, 300]],   // the stem

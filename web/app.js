@@ -73,7 +73,12 @@ function setPlaceholder() {
 
 // ---------------------------------------------------------------- API
 
+// Browser edition (GitHub Pages): there's no server; web/local/backend.js answers the same
+// "/api/..." requests inside the page, with everything stored on this device.
+const LOCAL = !!window.LOCAL_MODE;
+
 async function api(path, options = {}) {
+  if (LOCAL) return (await window.localBackendReady).request(path, options);
   const res = await fetch(path, options);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -98,6 +103,7 @@ function setVoice(on) {
 // One way in: typing and the mic both work from the chat, and "read answers aloud" keeps
 // its saved setting (the speaker button next to the ask bar, or Settings).
 function enter() {
+  if (LOCAL) window.localBackendReady.then((b) => b.warmUp());
   setSound(soundPref(), false);            // this click lets the music start
   ambient?.whoosh(true);
   // The click is a user gesture, so the browser will allow speech later on.
@@ -344,13 +350,15 @@ function escapeHtml(s) {
 
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 const pdfView = { docId: null, pdf: null, loading: null, observer: null, width: 0 };
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;   // also used to read uploads (browser edition)
 
 async function loadPdf(docId) {
   if (pdfView.docId === docId) return pdfView.loading;
   resetPdf();
   pdfView.docId = docId;
   const box = $("viewer");
-  $("pdf-open").href = `/api/documents/${docId}/file`;
+  $("pdf-open").href = LOCAL ? "#" : `/api/documents/${docId}/file`;
+  if (LOCAL) (await window.localBackendReady).fileUrl(docId).then((u) => { if (pdfView.docId === docId) $("pdf-open").href = u; }).catch(() => {});
   if (!window.pdfjsLib) {
     box.innerHTML = `<p class="pdf-msg">The page viewer couldn't load. Use “Open file” above.</p>`;
     return;
@@ -359,7 +367,8 @@ async function loadPdf(docId) {
   box.innerHTML = `<p class="pdf-msg">Opening…</p>`;
   pdfView.loading = (async () => {
     try {
-      const pdf = await pdfjsLib.getDocument({ url: `/api/documents/${docId}/file`, withCredentials: true }).promise;
+      const source = LOCAL ? { data: await (await window.localBackendReady).fileData(docId) } : { url: `/api/documents/${docId}/file`, withCredentials: true };
+      const pdf = await pdfjsLib.getDocument(source).promise;
       if (pdfView.docId !== docId) return pdf.destroy();
       pdfView.pdf = pdf;
       const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
@@ -528,13 +537,14 @@ async function loadIdentity() {
   let me;
   try { me = await api("/api/me"); } catch { return; }
   const signedIn = me.kind === "account";
-  $("pill-label").textContent = signedIn ? me.name || me.email || "Your account" : "Guest";
+  $("pill-label").textContent = signedIn ? me.name || me.email || "Your account" : LOCAL ? "On this device" : "Guest";
   $("user-id").textContent = "";
   $("pill-lock").hidden = signedIn;
   $("avatar").hidden = !signedIn;
   $("avatar").textContent = (me.name || me.email || "?").trim()[0].toUpperCase();
   $("private-pill").title = signedIn
     ? `Signed in with ${me.provider === "google" ? "Google" : "Microsoft"}${me.email ? ` as ${me.email}` : ""}. Your PDFs are private to your account.`
+    : LOCAL ? "Your PDFs stay on this device: they're read and searched right here in your browser. Nothing is uploaded."
     : "Guest: your PDFs are private to this browser. Nobody else can see or search them.";
   $("signout").hidden = !signedIn;
   $("signin").hidden = signedIn || me.providers.length === 0;
@@ -715,7 +725,7 @@ async function send(message, via, audio, { echo = true } = {}) {
     const docQuery = params.toString() ? `?${params}` : "";
     const ans = audio
       ? await api(`/api/chat/voice${docQuery}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: audio.buffer })
-      : await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: message.trim(), doc_id: state.doc?.doc_id ?? null, conv_id: state.conv }) });
+      : await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: message.trim(), doc_id: state.doc?.doc_id ?? null, conv_id: state.conv, via }) });
     if (audio) {
       userMsg.textContent = ans.question;
       userMsg.dataset.text = ans.question;
@@ -895,7 +905,44 @@ function speak(text) {
 
 // ---------------------------------------------------------------- speech in
 
+// Browser edition: no server to run Whisper, so use the browser's own speech recognition.
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function startDictation() {
+  if (!Recognition) return showError("Voice isn't supported in this browser. Try Chrome, Edge or Safari, or type your question.");
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  const rec = new Recognition();
+  rec.lang = navigator.language?.startsWith("en") ? navigator.language : "en-US";
+  rec.interimResults = true;
+  rec.continuous = false;
+  let finalText = "";
+  rec.onresult = (e) => {
+    let interim = "";
+    for (const r of e.results) (r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript));
+    $("question").value = finalText || interim;   // show the words as they're heard
+    scene?.beat(0.7);
+  };
+  rec.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") showError("Microphone access is blocked. Allow the microphone for this page in your browser settings, or type instead.");
+    else if (e.error !== "no-speech" && e.error !== "aborted") showError("Voice didn't work this time. Try again, or type your question.");
+  };
+  rec.onend = () => {
+    state.recording = null;
+    ambient?.duck(0);
+    setMic("idle");
+    const text = (finalText || $("question").value).trim();
+    $("question").value = "";
+    if (text) send(text, "voice");
+  };
+  state.recording = { dictation: rec };
+  ambient?.duck(2);
+  setMic("listening");
+  hideError();
+  rec.start();
+}
+
 async function startRecording() {
+  if (LOCAL) return state.recording ? null : startDictation();
   if (state.recording || state.busy) return;
   hideError();
   if ("speechSynthesis" in window) speechSynthesis.cancel();
@@ -925,6 +972,7 @@ async function startRecording() {
 async function stopRecording() {
   const rec = state.recording;
   if (!rec) return;
+  if (rec.dictation) return rec.dictation.stop();   // onend sends what was heard
   state.recording = null;
   ambient?.duck(0);
   rec.processor.disconnect();
@@ -1159,6 +1207,21 @@ function applyMotion(on) {
     }
   }).catch(() => {});
 })();
+
+// ---------------------------------------------------------------- browser edition: model download
+// The first time, the three AI models (~120 MB) download into the browser's cache.
+if (LOCAL) {
+  const bar = document.createElement("div");
+  bar.className = "model-status";
+  bar.setAttribute("role", "status");
+  bar.hidden = true;
+  document.body.append(bar);
+  addEventListener("model-progress", (e) => {
+    const d = e.detail;
+    bar.hidden = !d;
+    if (d) bar.innerHTML = `<span>Getting the AI ready on your device (one time) · ${Math.round(d.loaded / 1e6)} of ${Math.round(d.total / 1e6)} MB</span><i style="--p:${(d.loaded / d.total).toFixed(3)}"></i>`;
+  });
+}
 
 // ---------------------------------------------------------------- start
 

@@ -18,11 +18,32 @@ Upload a PDF and ask questions about it by typing or speaking. Answers come only
 ```bash
 cd project2-pdf-assistant   # this folder
 ../.venv/bin/uvicorn api:app --port 8766   # then open http://127.0.0.1:8766
-../.venv/bin/pytest -q                     # 60 tests
+../.venv/bin/pytest -q                     # 61 tests
 ../.venv/bin/python make_sample_pdf.py     # rebuild the sample manual
 ```
 
-## Deploy (free, works on phones)
+## Try it online: the browser edition (free, no server)
+
+**Live:** https://dharshinikalaiyan.github.io/talk-to-your-pdf/
+
+The same app, running entirely in the visitor's browser and hosted free on GitHub Pages.
+**PDFs never leave the device**: they're read with PDF.js and searched with the same three
+open-source models (embeddings, re-ranker, reader), run by Transformers.js. Library and saved
+chats live in the browser (IndexedDB). The first visit downloads ~120 MB of models once.
+
+| | Server edition (`api.py`) | Browser edition (`docs/`) |
+|---|---|---|
+| Where it runs | Python server | The visitor's browser |
+| Privacy | Each user's library is private on the server | Nothing leaves the device |
+| Sign-in | Google (optional) | Not needed |
+| Voice in | Whisper on the server | The browser's speech recognition |
+| Answers | Local, or Groq / Claude | Local |
+| Hosting | Any Docker host | Any static host, free |
+
+Build it: `../.venv/bin/python build_pages.py` (copies `web/` + `web/local/` into `docs/`).
+Preview: `python3 -m http.server 8790 --directory docs`.
+
+## Deploy the server edition
 
 Step-by-step: **[DEPLOY.md](DEPLOY.md)** (Hugging Face Spaces, Docker). The `Dockerfile` bakes the models in,
 `download_models.py` fetches them, and public-demo settings delete uploads after 24 hours
@@ -99,6 +120,8 @@ question → library.search: embeddings pick 8 candidates → re-ranker keeps th
 | `pdf_assistant/library.py` | One vector index per document, **two-stage retrieval** (embeddings → re-ranker), de-duplicating uploads by content hash |
 | `pdf_assistant/reader.py` | **Re-ranker** (cross-encoder) and **extractive QA reader**: free local models that find the exact answer phrase |
 | `pdf_assistant/conversation.py` | A rule-based NLP router in front of RAG: greetings and small talk ("hi, what's up?"), a how-to-use guide, picking a PDF by name ("open the lease", "warranty in the helios manual?"), or "which PDF?" with the question remembered. No AI model needed |
+| `web/local/engine.js` | The browser edition's pipeline: PDF.js text → chunks → embeddings + re-ranker + reader (Transformers.js), and the chat router, ported from Python |
+| `web/local/backend.js` | Answers the app's `/api/...` requests inside the page, storing PDFs and chats in IndexedDB |
 | `pdf_assistant/history.py` | Saved chats like ChatGPT ("+ New chat", a sidebar of earlier chats), private per user, stored without document text |
 | `pdf_assistant/answering.py` | Engine chain Claude → Groq → local, grounded prompting with page citations, graceful fallback |
 | `pdf_assistant/voice.py` | Speech-to-text, and making text sound natural when spoken |

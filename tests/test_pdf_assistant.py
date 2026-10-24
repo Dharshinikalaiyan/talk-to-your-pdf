@@ -511,3 +511,11 @@ def test_saved_chats_work_like_a_sidebar(two_users):
     assert [c["id"] for c in alice.get("/api/conversations").json()] == [second]
     alice.delete("/api/conversations")
     assert alice.get("/api/conversations").json() == []
+
+
+def test_prefers_the_best_ranked_passage_on_a_near_tie(doc):
+    """'30 days' (registration, p.3) and '10-year' (p.5) get near-identical reader scores."""
+    from pdf_assistant.answering import local_answer
+
+    result = local_answer("How long is the warranty?", doc.search("How long is the warranty?"))
+    assert result.highlight == "10-year" and "[p. 5]" in result.text
