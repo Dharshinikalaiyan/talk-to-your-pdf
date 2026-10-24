@@ -9,6 +9,7 @@ There is no server, so: no sign-in, no Groq/Claude, and voice uses the browser's
 speech recognition instead of Whisper.
 """
 
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -22,6 +23,10 @@ BOOT = """  <script>
   </script>
   <script type="module" src="local/backend.js"></script>
 """
+
+
+def _hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:10]
 
 
 def build() -> Path:
@@ -47,6 +52,14 @@ def build() -> Path:
         "Runs entirely in your browser · your PDFs never leave this device",
     )
     assert "LOCAL_MODE" in html, "couldn't find the app.js script tag"
+    # Cache busting: GitHub Pages lets browsers keep files for 10 minutes, so after an update
+    # a visitor could get the new page with the old styles. Stamping each link with a hash of
+    # the file's contents makes every update load as one consistent set.
+    engine = OUT / "local" / "engine.js"
+    backend = OUT / "local" / "backend.js"
+    backend.write_text(backend.read_text().replace('from "./engine.js"', f'from "./engine.js?v={_hash(engine)}"'))
+    for name in ["style.css", "app.js", "pond.js", "scene3d.js", "ripples.js", "sound.js", "local/backend.js"]:
+        html = html.replace(f'"{name}"', f'"{name}?v={_hash(OUT / name)}"')
     (OUT / "index.html").write_text(html)
     (OUT / ".nojekyll").write_text("")                           # serve files as they are
     return OUT

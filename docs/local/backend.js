@@ -6,7 +6,7 @@
 // visitor's library is private by construction.
 
 import * as T from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
-import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError } from "./engine.js";
+import { extractPages, chunkPages, createModels, search, answer, route, cleanForSpeech, docTitle, PDFError } from "./engine.js?v=6f916401d4";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_DOCS = 100;
