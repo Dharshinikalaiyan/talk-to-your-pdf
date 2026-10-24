@@ -184,28 +184,19 @@ addEventListener("popstate", () => { if (location.hash !== "#app") showEntry(); 
 
 const docTitle = (d) => d.filename.replace(/\.pdf$/i, "");
 
-// The picker under "Let's talk.": the most recent PDFs as chips, plus "all" and "upload".
+// Under "Let's talk.": with an empty library, Upload and the sample; once there are PDFs,
+// just a light "+ Add PDFs" (pick a PDF from "My PDFs", or simply name it in the chat).
 function renderPicks() {
   const box = $("doc-picks");
   box.innerHTML = "";
-  const recent = [...state.docs].reverse().slice(0, 5);
-  for (const d of recent) box.append(docButton(d, "pick"));
-  if (state.docs.length > recent.length) {
-    const all = document.createElement("button");
-    all.type = "button";
-    all.className = "pick more";
-    all.dataset.library = "";
-    all.innerHTML = `${icon("library")}All ${state.docs.length} PDFs`;
-    box.append(all);
-  }
+  const empty = !state.docs.length;
   const up = document.createElement("button");
   up.type = "button";
-  up.className = "pick add";
+  up.className = empty ? "pick add" : "pick add-light";
   up.dataset.upload = "";
-  up.innerHTML = `${icon("plus")}${state.docs.length ? "Add PDFs" : "Upload PDFs"}`;
+  up.innerHTML = `${icon("plus")}${empty ? "Upload PDFs" : "Add PDFs"}`;
   box.append(up);
-  // the sample stays on offer until it's in the library
-  if (!state.docs.some((d) => /\(sample\)/i.test(d.filename))) {
+  if (empty) {
     const sample = document.createElement("button");
     sample.type = "button";
     sample.className = "pick ghost";
@@ -255,7 +246,7 @@ function updateIntro() {
   $("intro-title").textContent = state.doc ? "Ask me anything." : "Let's talk.";
   $("intro-sub").textContent = state.doc
     ? `About ${docTitle(state.doc)}. Every answer shows its page.`
-    : state.docs.length ? "Choose a PDF, or just say which one. Then ask me anything." : "Add a PDF, then ask it anything, out loud or typed.";
+    : state.docs.length ? "Pick one from My PDFs, or just say which one. Then ask me anything." : "Add a PDF, then ask it anything, out loud or typed.";
   $("doc-picks").hidden = !!state.doc;
   renderPicks();
 }

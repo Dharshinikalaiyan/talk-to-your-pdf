@@ -564,3 +564,7 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 .composer.voice-mode { border-color: var(--violet); box-shadow: 0 18px 44px -24px rgb(60 20 140 / .6), 0 0 0 4px rgb(122 60 230 / .14); }
 /* the composer's mic stands out a little more */
 .mic { background: linear-gradient(135deg, #EFE5FF, #E2D2FF); }
+
+/* "+ Add PDFs" once the library has PDFs: present, but quiet */
+.pick.add-light { background: rgb(122 60 230 / .08); color: var(--violet); border-color: rgb(122 60 230 / .16); box-shadow: none; }
+.pick.add-light:hover:not(:disabled) { background: rgb(122 60 230 / .14); border-color: rgb(122 60 230 / .3); }
