@@ -475,7 +475,12 @@ svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; s
 
 /* the chats sidebar takes the PDF's place while it's open, instead of piling on top */
 .sidebar-open .drawer.open { opacity: 0; transform: translateX(-40px); pointer-events: none; transition-delay: 0s; }
-.library.sidebar { z-index: 26; width: min(380px, calc(100vw - 2 * var(--gutter))); }
+.library.sidebar { z-index: 26; width: var(--side-w); }
+:root { --side-w: min(380px, calc(100vw - 2 * var(--gutter))); }
+/* no PDF open: the centred card makes room beside the sidebar instead of being covered */
+@media (min-width: 900px) {
+  .sidebar-open:not(.with-pdf) .chat { left: calc(2 * var(--gutter) + var(--side-w)); width: calc(100vw - var(--side-w) - 3 * var(--gutter)); }
+}
 
 /* inside the wide card, the conversation keeps a comfortable reading width */
 .panel-scroll { padding-inline: max(28px, calc((100% - 860px) / 2)); }

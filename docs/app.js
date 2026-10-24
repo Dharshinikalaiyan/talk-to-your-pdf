@@ -65,7 +65,11 @@ function placeScene() {
   // where the column will END UP (it may be mid-slide): centred, or on the right.
   // Same sizes as .chat / --chat-w / --gutter in style.css.
   const gutter = clamp(16, innerWidth * 0.026, 36);
-  const cx = withPdf() && wide() ? innerWidth - gutter - clamp(440, innerWidth * 0.42, 640) / 2 : innerWidth / 2;
+  const sideW = Math.min(380, innerWidth - 2 * gutter);
+  const beside = document.body.classList.contains("sidebar-open") && wide() && !withPdf();
+  const cx = withPdf() && wide() ? innerWidth - gutter - clamp(440, innerWidth * 0.42, 640) / 2
+    : beside ? 2 * gutter + sideW + (innerWidth - sideW - 3 * gutter) / 2
+    : innerWidth / 2;
   if (fresh) {
     // above the card, big
     const slotH = phone ? clamp(120, innerHeight * 0.24, 200) : clamp(170, innerHeight * 0.34, 340);
@@ -866,14 +870,19 @@ async function openHistory() {
   try { state.convs = await api("/api/conversations"); } catch { state.convs = []; }
   renderHistory();
   $("history").hidden = false;
+  if (!withPdf()) relocateChat("-40px");          // the card makes room beside the list
   document.body.classList.add("sidebar-open");   // the PDF steps aside while the list is open
+  placeScene();
   slideIn($("history"));
   $("history-search").focus();
 }
 
 function closeHistory() {
+  if ($("history").hidden) return;
   $("history").classList.remove("open");
+  if (!withPdf() && document.body.classList.contains("sidebar-open")) relocateChat("40px");
   document.body.classList.remove("sidebar-open");
+  placeScene();
   setTimeout(() => { if (!$("history").classList.contains("open")) $("history").hidden = true; }, reduced() ? 0 : 400);
 }
 
