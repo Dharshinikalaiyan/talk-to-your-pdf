@@ -204,7 +204,8 @@ function renderPicks() {
   up.dataset.upload = "";
   up.innerHTML = `${icon("plus")}${state.docs.length ? "Add PDFs" : "Upload PDFs"}`;
   box.append(up);
-  if (!state.docs.length) {
+  // the sample stays on offer until it's in the library
+  if (!state.docs.some((d) => /\(sample\)/i.test(d.filename))) {
     const sample = document.createElement("button");
     sample.type = "button";
     sample.className = "pick ghost";
