@@ -395,7 +395,8 @@ def _chat(user: str, message: str, doc_id: str | None, latency: dict[str, float]
     current = _doc(user, doc_id, action).info if doc_id else None
     r = route(message, library.list(user), current)
     if r.ask_doc:
-        answer = _answer(user, library.get(user, r.ask_doc.doc_id), message, latency, ip, action)
+        answer = _answer(user, library.get(user, r.ask_doc.doc_id), r.question or message, latency, ip, action)
+        answer.question = message
         answer.doc_id = r.ask_doc.doc_id
         answer.open_doc = r.open_doc
         return answer

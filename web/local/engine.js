@@ -199,7 +199,8 @@ export async function answer(models, question, citations) {
 }
 
 export function cleanForSpeech(text) {
-  return text.replace(/^\([^)]*\)\s*/, "").replace(/\[p\.\s*(\d+)\]/g, "(page $1)").replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim();
+  // the page is shown on screen; reading "page 5" aloud just interrupts the answer
+  return text.replace(/^\([^)]*\)\s*/, "").replace(/\s*\[p\.\s*\d+\]/g, "").replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim();
 }
 
 // ---------------------------------------------------------------- the router (port of conversation.py)
@@ -311,6 +312,22 @@ export function findDocuments(message, docs) {
   return [best, used];
 }
 
+const DOC_WORDS = new Set(["pdf", "document", "doc", "file", "manual", "guide", "booklet", "report", "policy", "terms"]);
+
+/** 'How long is the warranty in the Helios manual?' -> 'How long is the warranty?'
+ *  The PDF's name helps pick the document but confuses the search and the reader. */
+export function stripName(message, hits) {
+  const kept = message.trim().split(/\s+/).map((w) => {
+    const ws = words(w);
+    const named = ws.some((m) => [...hits].some((t) => same(t, m))) || (ws.length && DOC_WORDS.has(ws[0]));
+    return named ? w.match(/[?.!]*$/)[0] : w;   // drop the word, keep a closing "?"
+  }).filter(Boolean);
+  let text = kept.join(" ")
+    .replace(/\s+(in|from|of|on|about|for|inside|according to)(\s+(the|my|this|that))?\s*(?=[?.!]*$)/i, "")
+    .replace(/\s+([?.!])/g, "$1").trim();
+  return words(text).length >= 2 ? text : message;
+}
+
 /** Decide what to do with a message. `docs` are this device's documents, oldest first. */
 export function route(message, docs, current) {
   const recent = [...docs].reverse().slice(0, 6);
@@ -328,7 +345,7 @@ export function route(message, docs, current) {
       if (current && doc.doc_id === current.doc_id) return { reply: `We're already on ${docTitle(doc)}. Ask away!` };
       return { reply: `Opened ${docTitle(doc)}. What would you like to know?`, openDoc: doc };
     }
-    return { openDoc: !current || doc.doc_id !== current.doc_id ? doc : null, askDoc: doc };
+    return { openDoc: !current || doc.doc_id !== current.doc_id ? doc : null, askDoc: doc, question: stripName(message, hits) };
   }
   if (current) return { askDoc: current };
   if (!docs.length) return { reply: "I don't have a PDF to look in yet. Tap Upload to add one, or try the sample manual, and then ask me again." };

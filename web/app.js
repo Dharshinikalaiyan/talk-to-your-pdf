@@ -254,7 +254,7 @@ function updateIntro() {
   $("intro-title").textContent = state.doc ? "Ask me anything." : "Let's talk.";
   $("intro-sub").textContent = state.doc
     ? `About ${docTitle(state.doc)}. Every answer shows its page.`
-    : state.docs.length ? "Choose a PDF, or just tell me which one. Then ask me anything." : "Add a PDF to begin, then ask me anything about it, typed or out loud.";
+    : state.docs.length ? "Choose a PDF, or just say which one. Then ask me anything." : "Add a PDF, then ask it anything, out loud or typed.";
   $("doc-picks").hidden = !!state.doc;
   renderPicks();
 }
@@ -680,7 +680,7 @@ function answerNodes(text, docId) {
   return frag;
 }
 
-function addBotMessage(ans, { restoring = false } = {}) {
+function addBotMessage(ans, { restoring = false, spoken = false } = {}) {
   const li = document.createElement("li");
   li.className = `msg bot ${ans.kind === "chat" ? "talk" : ""}`;
   const top = ans.citations[0];
@@ -735,7 +735,8 @@ function addBotMessage(ans, { restoring = false } = {}) {
   if (top) scene?.burst();
   // the PDF pane turns to the page the answer came from
   if (top && wide() && withPdf() && (!ans.doc_id || ans.doc_id === state.doc?.doc_id)) showPdf(top.page);
-  if ($("speak").checked && ans.spoken) speak(ans.spoken);
+  // asked out loud -> answered out loud; typed questions follow the read-aloud setting
+  if ((spoken || $("speak").checked) && ans.spoken) speak(ans.spoken);
 }
 
 // Pick a PDF from a chip/choice. If the user had already asked something, answer it now.
@@ -774,6 +775,7 @@ async function send(message, via, audio, { echo = true } = {}) {
   if (!audio && !message.trim()) return;
   hideError();
   setBusy(true);
+  if (via === "voice") voiceBar("thinking");
   scene?.flash();   // the logo lights up once for each new question
   const userMsg = audio ? addUserMessage("…", via) : echo ? addUserMessage(message.trim(), via) : null;
   const typing = addTyping();
@@ -793,7 +795,7 @@ async function send(message, via, audio, { echo = true } = {}) {
     typing.remove();
     if (ans.conv_id) setConv(ans.conv_id);   // saved: the first message starts a new saved chat
     if (ans.open_doc) openDoc(state.docs.find((d) => d.doc_id === ans.open_doc.doc_id) || ans.open_doc);
-    addBotMessage(ans);
+    addBotMessage(ans, { spoken: via === "voice" });
     renderSuggestions();
   } catch (e) {
     typing.remove();
@@ -920,6 +922,7 @@ async function addSample() {
 
 function setBusy(busy) {
   state.busy = busy;
+  if (!busy && $("voice-bar").dataset.mode === "thinking") voiceBar(null);
   for (const el of document.querySelectorAll(".composer button, .suggest button, .pick")) el.disabled = busy;
   $("speak-btn").disabled = false;
   setMic(busy ? "thinking" : state.recording ? "listening" : "idle");
@@ -945,6 +948,7 @@ function speak(text) {
   };
   u.onstart = () => {
     speaking = true;
+    voiceBar("speaking");
     if (!state.recording) ambient?.duck(1);   // music steps back while the answer is read
     sceneMode("speaking");
     syllable();
@@ -952,6 +956,7 @@ function speak(text) {
   u.onboundary = () => scene?.beat(1);
   u.onend = u.onerror = () => {
     speaking = false;
+    if ($("voice-bar").dataset.mode === "speaking") voiceBar(null);
     if (!state.recording) ambient?.duck(0);
     clearTimeout(beatTimer);
     sceneLevel(0);
@@ -976,7 +981,7 @@ function startDictation() {
   rec.onresult = (e) => {
     let interim = "";
     for (const r of e.results) (r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript));
-    $("question").value = finalText || interim;   // show the words as they're heard
+    voiceBar("listening", `“${finalText || interim}”`);   // show the words as they're heard
     talking = true;
     scene?.beat(1);
   };
@@ -988,8 +993,7 @@ function startDictation() {
     state.recording = null;
     ambient?.duck(0);
     setMic("idle");
-    const text = (finalText || $("question").value).trim();
-    $("question").value = "";
+    const text = finalText.trim();
     if (text) send(text, "voice");
   };
   // The browser's recogniser doesn't share the mic's loudness, so the logo beats in a
@@ -1095,6 +1099,23 @@ function followVoice() {
   requestAnimationFrame(followVoice);
 }
 
+// The voice bar above the ask bar: listening (what it hears), thinking, or speaking (Stop).
+function voiceBar(mode, text) {
+  const bar = $("voice-bar");
+  bar.hidden = !mode;
+  if (!mode) return;
+  bar.dataset.mode = mode;
+  $("vb-text").textContent = text ?? { listening: "Listening… go ahead, ask your question.", thinking: "Thinking…", speaking: "Speaking the answer…" }[mode];
+  $("vb-btn").hidden = mode === "thinking";
+  $("vb-btn").textContent = mode === "speaking" ? "Stop" : "Send";
+}
+
+$("vb-btn").addEventListener("click", () => {
+  if ($("voice-bar").dataset.mode === "speaking") { if ("speechSynthesis" in window) speechSynthesis.cancel(); voiceBar(null); }
+  else stopRecording();
+});
+$("voice-hero").addEventListener("click", () => (state.recording ? stopRecording() : startRecording()));
+
 function setMic(mode) {
   const mic = $("mic");
   mic.classList.toggle("listening", mode === "listening");
@@ -1105,6 +1126,11 @@ function setMic(mode) {
   mic.disabled = mode === "thinking";
   mic.querySelector("use").setAttribute("href", { idle: "#i-mic", listening: "#i-square", thinking: "#i-loader" }[mode]);
   if (mode !== "idle" || !("speechSynthesis" in window) || !speechSynthesis.speaking) sceneMode(mode);
+  $("voice-hero").classList.toggle("listening", mode === "listening");
+  $("voice-hero").querySelector("b").textContent = mode === "listening" ? "Listening… tap to send" : "Tap and ask out loud";
+  if (mode === "listening") voiceBar("listening");
+  else if (mode === "thinking" && $("voice-bar").dataset.mode === "listening" && !$("voice-bar").hidden) voiceBar("thinking");
+  else if (mode === "idle" && $("voice-bar").dataset.mode !== "speaking") voiceBar(null);
   $("mic-hint").textContent = {
     idle: "Tap the mic to talk, tap again to send.",
     listening: "Listening… tap again when you're done.",

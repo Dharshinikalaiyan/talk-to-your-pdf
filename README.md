@@ -109,7 +109,7 @@ question → library.search: embeddings pick 8 candidates → re-ranker keeps th
 ```
 🎤 browser mic → 16 kHz audio → voice.transcribe (Whisper, local)
               → same search + answer as Module 1
-              → voice.clean_for_speech ("[p. 4]" becomes "page 4") → browser reads it aloud
+              → voice.clean_for_speech (page numbers dropped; they're on screen) → browser reads it aloud
 ```
 
 ## What each file teaches

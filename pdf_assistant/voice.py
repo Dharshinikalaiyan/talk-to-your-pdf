@@ -2,7 +2,7 @@
 CONCEPT: voice is a wrapper around the same question-answer pipeline.
 
     🎤 browser mic -> 16 kHz audio -> transcribe() (Whisper, local) -> ask the PDF
-    -> answer -> clean_for_speech() -> browser reads it aloud
+    -> answer -> clean_for_speech() (no page numbers) -> browser reads it aloud
 
 Same approach as Project 1's voice layer; see project1-secure-rag/secure_rag/voice.py.
 """
@@ -34,8 +34,8 @@ def transcribe(audio: np.ndarray, hint: str = "") -> str:
 
 
 def clean_for_speech(text: str) -> str:
-    """Turn [p. 3] into 'page 3' and drop notes and markdown, so it sounds natural."""
+    """Drop [p. 3] citations, notes and markdown, so it sounds natural (the page is shown on screen)."""
     text = re.sub(r"^\([^)]*\)\s*", "", text)
-    text = re.sub(r"\[p\.\s*(\d+)\]", r"(page \1)", text)
+    text = re.sub(r"\s*\[p\.\s*\d+\]", "", text)   # the page is on screen; don't read it out
     text = re.sub(r"[*_#`]", "", text)
     return re.sub(r"\s+", " ", text).strip()

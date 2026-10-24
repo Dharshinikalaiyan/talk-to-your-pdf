@@ -134,8 +134,9 @@ async function chat({ message, doc_id, conv_id }, via = "text") {
   let ans;
   if (r.askDoc) {
     const doc = docs.find((d) => d.doc_id === r.askDoc.doc_id);
-    const citations = await search(models, doc, message);
-    const a = await answer(models, message, citations);
+    const q = r.question || message;   // the PDF's name taken out
+    const citations = await search(models, doc, q);
+    const a = await answer(models, q, citations);
     ans = { question: message, answer: a.text, citations, engine: "local", highlight: a.highlight, note: "", spoken: cleanForSpeech(a.text),
       kind: "doc", doc_id: doc.doc_id, open_doc: r.openDoc || null, choices: [], pending: "" };
   } else {

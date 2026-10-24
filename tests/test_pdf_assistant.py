@@ -82,7 +82,7 @@ def test_same_file_twice_by_same_user_is_indexed_once(sample_pdf, tmp_path):
 
 
 def test_clean_for_speech():
-    assert clean_for_speech("(offline mode) It lasts **10 years** [p. 5].") == "It lasts 10 years (page 5)."
+    assert clean_for_speech("(offline mode) It lasts **10 years** [p. 5].") == "It lasts 10 years."
 
 
 def test_api_upload_ask_and_voice(sample_pdf, tmp_path, monkeypatch):
@@ -519,3 +519,27 @@ def test_prefers_the_best_ranked_passage_on_a_near_tie(doc):
 
     result = local_answer("How long is the warranty?", doc.search("How long is the warranty?"))
     assert result.highlight == "10-year" and "[p. 5]" in result.text
+
+
+@pytest.mark.parametrize("message, cleaned", [
+    ("How long is the warranty in the helios manual?", "How long is the warranty?"),
+    ("What does error E07 mean in the Helios H2 manual?", "What does error E07 mean?"),
+    ("helios warranty", "warranty"),            # too short after stripping -> keep the original
+])
+def test_naming_the_pdf_is_taken_out_of_the_question(message, cleaned):
+    from pdf_assistant.conversation import strip_name
+
+    expected = cleaned if len(cleaned.split()) >= 2 else message
+    assert strip_name(message, {"helios", "h2", "manual"}) == expected
+
+
+def test_question_naming_the_pdf_gets_the_right_answer(sample_pdf, tmp_path, monkeypatch):
+    import api
+
+    _isolate_api(api, tmp_path, monkeypatch)
+    client = TestClient(api.app)
+    client.post("/api/documents", files={"file": ("Helios H2 manual.pdf", sample_pdf, "application/pdf")})
+    client.post("/api/documents", files={"file": ("Other notes.pdf", sample_pdf[:-1] + b" ", "application/pdf")})
+    ans = client.post("/api/chat", json={"message": "How long is the warranty in the helios manual?"}).json()
+    assert ans["highlight"] == "10-year" and ans["citations"][0]["page"] == 5
+    assert ans["question"] == "How long is the warranty in the helios manual?"   # shown as asked

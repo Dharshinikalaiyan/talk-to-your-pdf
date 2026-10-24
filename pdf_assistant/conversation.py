@@ -184,6 +184,25 @@ def find_documents(message: str, docs: list[DocumentInfo]) -> tuple[list[Documen
     return best, used
 
 
+DOC_WORDS = {"pdf", "document", "doc", "file", "manual", "guide", "booklet", "report", "policy", "terms"}
+
+
+def strip_name(message: str, name_hits: set[str]) -> str:
+    """'How long is the warranty in the Helios manual?' -> 'How long is the warranty?'
+
+    The PDF's name helps pick the document but confuses the search and the reader."""
+    kept = []
+    for w in re.split(r"\s+", message.strip()):
+        if any(_same(t, m) for m in words(w) for t in name_hits) or (words(w) and words(w)[0] in DOC_WORDS):
+            kept.append(re.search(r"[?.!]*$", w).group())   # drop the word, keep a closing "?"
+        else:
+            kept.append(w)
+    text = " ".join(k for k in kept if k)
+    text = re.sub(r"\s+(in|from|of|on|about|for|inside|according to)(\s+(the|my|this|that))?\s*(?=[?.!]*$)", "", text, flags=re.I)
+    text = re.sub(r"\s+([?.!])", r"\1", text).strip()
+    return text if len(words(text)) >= 2 else message
+
+
 def _leftover(message: str, name_hits: set[str]) -> list[str]:
     """What's left of the message once the document's name and "open / talk about" words are removed."""
     return [m for m in words(message) if m not in FILLER and not any(_same(m, t) for t in name_hits)]
@@ -199,6 +218,7 @@ class Route:
     ask_doc: DocumentInfo | None = None   # answer the question from this document
     choices: list[DocumentInfo] = field(default_factory=list)  # let the user pick one
     pending: str = ""                     # the question to answer once they've picked
+    question: str = ""                    # the question to search with (the PDF's name taken out)
 
 
 def route(message: str, docs: list[DocumentInfo], current: DocumentInfo | None) -> Route:
@@ -224,7 +244,8 @@ def route(message: str, docs: list[DocumentInfo], current: DocumentInfo | None) 
             if current and doc.doc_id == current.doc_id:
                 return Route(reply=f"We're already on {doc_title(doc)}. Ask away!")
             return Route(reply=f"Opened {doc_title(doc)}. What would you like to know?", open_doc=doc)
-        return Route(open_doc=doc if not current or doc.doc_id != current.doc_id else None, ask_doc=doc)
+        return Route(open_doc=doc if not current or doc.doc_id != current.doc_id else None, ask_doc=doc,
+                     question=strip_name(message, hits))
 
     if current:
         return Route(ask_doc=current)
